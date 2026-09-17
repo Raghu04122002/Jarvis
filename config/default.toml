@@ -1,0 +1,32 @@
+[server]
+host = "127.0.0.1"
+port = 8000
+debug = false
+
+[database]
+host = "localhost"
+port = 5432
+name = "jarvis"
+# username and password must be set via environment variables:
+#   JARVIS_DATABASE__USERNAME
+#   JARVIS_DATABASE__PASSWORD
+
+[logging]
+level = "INFO"
+format = "text"  # "text" or "json"
+
+[agents]
+claude_command = "claude"
+default_timeout = 300
+
+[browser]
+headless = true
+default_timeout_ms = 30000
+viewport_width = 1280
+viewport_height = 720
+allowed_domains = []
+blocked_domains = ["*.bank.*", "*.paypal.com", "pay.google.com", "venmo.com"]
+
+[memory]
+max_context_memories = 10
+search_limit = 20
