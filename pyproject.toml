@@ -20,13 +20,20 @@ dependencies = [
     "rich>=13.9,<14",
     "tomli>=2.0,<3; python_version < '3.11'",
     "playwright>=1.40,<2",
+    "croniter>=2.0,<4",
+    "pyautogui>=0.9,<1",
+    "anthropic>=0.40,<1",
+    "httpx>=0.27,<1",
+    "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]
+notifications = [
+    "plyer>=2.1,<3",
+]
 dev = [
     "pytest>=8.3,<9",
     "pytest-asyncio>=0.24,<1",
-    "httpx>=0.27,<1",
     "aiosqlite>=0.20,<1",
     "ruff>=0.8,<1",
     "mypy>=1.13,<2",

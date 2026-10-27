@@ -27,6 +27,7 @@ class EventType(enum.StrEnum):
     TOOL_EXECUTION_STARTED = "tool_execution_started"
     TOOL_EXECUTION_COMPLETED = "tool_execution_completed"
     AGENT_FALLBACK_TRIGGERED = "agent_fallback_triggered"
+    TASK_REVIEWED = "task_reviewed"
     MEMORY_CREATED = "memory_created"
     MEMORY_UPDATED = "memory_updated"
     MEMORY_DELETED = "memory_deleted"
@@ -34,6 +35,22 @@ class EventType(enum.StrEnum):
     APPROVAL_APPROVED = "approval_approved"
     APPROVAL_DENIED = "approval_denied"
     APPROVAL_EXPIRED = "approval_expired"
+    SCHEDULE_CREATED = "schedule_created"
+    SCHEDULE_UPDATED = "schedule_updated"
+    SCHEDULE_PAUSED = "schedule_paused"
+    SCHEDULE_RESUMED = "schedule_resumed"
+    SCHEDULE_CANCELLED = "schedule_cancelled"
+    SCHEDULE_TRIGGERED = "schedule_triggered"
+    SCHEDULE_FAILED = "schedule_failed"
+    NOTIFICATION_SENT = "notification_sent"
+    NOTIFICATION_FAILED = "notification_failed"
+    WORKFLOW_STARTED = "workflow_started"
+    WORKFLOW_STEP_STARTED = "workflow_step_started"
+    WORKFLOW_STEP_COMPLETED = "workflow_step_completed"
+    WORKFLOW_STEP_FAILED = "workflow_step_failed"
+    WORKFLOW_COMPLETED = "workflow_completed"
+    WORKFLOW_FAILED = "workflow_failed"
+    QUERY_ANSWERED = "query_answered"
 
 
 @dataclass(frozen=True)
@@ -67,6 +84,14 @@ class EventBus:
                 handler(event)
             except Exception:
                 logger.exception("Event handler error for %s", event.type)
+
+    def unsubscribe(self, event_type: EventType, handler: EventHandler) -> None:
+        """Remove a specific handler for an event type."""
+        handlers = self._handlers.get(event_type, [])
+        try:
+            handlers.remove(handler)
+        except ValueError:
+            pass
 
     def clear(self) -> None:
         """Remove all handlers. Used in tests."""

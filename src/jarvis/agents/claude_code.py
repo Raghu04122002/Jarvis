@@ -55,12 +55,21 @@ class ClaudeCodeAgent(BaseAgent):
     def agent_name(self) -> str:
         return "claude_code"
 
-    def __init__(self, claude_command: str = "claude", timeout: int = 300) -> None:
+    def __init__(
+        self,
+        claude_command: str = "claude",
+        timeout: int = 300,
+        model: str | None = None,
+        extra_env: dict[str, str] | None = None,
+    ) -> None:
         resolved = shutil.which(claude_command)
         if resolved is None:
             raise ClaudeNotFoundError(claude_command)
         self._claude_path: str = resolved
         self._timeout = timeout
+        self._model = model or None
+        # Applied on top of the sanitized env (e.g. to route to another backend).
+        self._extra_env: dict[str, str] = dict(extra_env or {})
         self._process: asyncio.subprocess.Process | None = None
         self._start_time: float | None = None
         self._end_time: float | None = None
@@ -68,7 +77,15 @@ class ClaudeCodeAgent(BaseAgent):
 
     def _sanitized_env(self) -> dict[str, str]:
         """Build a sanitized environment with only allowed keys."""
-        return {k: v for k, v in os.environ.items() if k in _ALLOWED_ENV_KEYS}
+        env = {k: v for k, v in os.environ.items() if k in _ALLOWED_ENV_KEYS}
+        env.update(self._extra_env)
+        return env
+
+    def _command(self, prompt: str) -> list[str]:
+        cmd = [self._claude_path, "--print"]
+        if self._model:
+            cmd += ["--model", self._model]
+        return [*cmd, "-p", prompt]
 
     async def run(self, prompt: str, working_dir: str) -> tuple[int, str, str]:
         """Launch claude --print -p "<prompt>" and capture output.
@@ -84,10 +101,7 @@ class ClaudeCodeAgent(BaseAgent):
 
         try:
             self._process = await asyncio.create_subprocess_exec(
-                self._claude_path,
-                "--print",
-                "-p",
-                prompt,
+                *self._command(prompt),
                 cwd=working_dir,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,

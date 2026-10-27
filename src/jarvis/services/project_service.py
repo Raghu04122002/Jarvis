@@ -7,7 +7,7 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from jarvis.db.tables import ProjectRow
@@ -112,6 +112,24 @@ class ProjectService:
         result = await session.execute(stmt)
         rows = result.scalars().all()
         return [_row_to_summary(r) for r in rows]
+
+    async def find_by_name(
+        self,
+        session: AsyncSession,
+        name_fragment: str,
+        *,
+        limit: int = 10,
+    ) -> list[Project]:
+        """Find projects by case-insensitive name substring match."""
+        stmt = (
+            select(ProjectRow)
+            .where(func.lower(ProjectRow.name).contains(name_fragment.lower()))
+            .order_by(ProjectRow.name.asc())
+            .limit(limit)
+        )
+        result = await session.execute(stmt)
+        rows = result.scalars().all()
+        return [_row_to_project(r) for r in rows]
 
     async def update_project(
         self,

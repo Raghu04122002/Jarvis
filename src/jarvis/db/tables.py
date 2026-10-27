@@ -131,6 +131,41 @@ class ApprovalRequestRow(Base):
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class ScheduledTaskRow(Base):
+    """Persistent storage for scheduled tasks."""
+
+    __tablename__ = "scheduled_tasks"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="")
+    schedule_type: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    cron_expression: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    interval_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    condition: Mapped[str | None] = mapped_column(Text, nullable=True)
+    task_request: Mapped[str] = mapped_column(Text, nullable=False)
+    task_priority: Mapped[str] = mapped_column(String(20), nullable=False, default="normal")
+    project_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active", index=True)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_run_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    run_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    max_runs: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    failure_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    max_failures: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    last_task_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
 class TaskStepRow(Base):
     """Persistent storage for task execution steps."""
 

@@ -37,8 +37,8 @@ async def test_list_tasks_empty(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_list_tasks_after_create(client: AsyncClient) -> None:
-    await client.post("/chat", json={"message": "Task 1"})
-    await client.post("/chat", json={"message": "Task 2"})
+    await client.post("/chat", json={"message": "Create task 1"})
+    await client.post("/chat", json={"message": "Build task 2"})
     resp = await client.get("/tasks")
     assert resp.status_code == 200
     assert len(resp.json()) == 2
@@ -46,7 +46,7 @@ async def test_list_tasks_after_create(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_list_tasks_filter_by_status(client: AsyncClient) -> None:
-    await client.post("/chat", json={"message": "A task"})
+    await client.post("/chat", json={"message": "Create a task"})
     resp = await client.get("/tasks", params={"status": "planning"})
     assert resp.status_code == 200
     assert len(resp.json()) == 1
@@ -76,7 +76,7 @@ async def test_get_task_not_found(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_cancel_task(client: AsyncClient) -> None:
-    chat_resp = await client.post("/chat", json={"message": "Cancel me"})
+    chat_resp = await client.post("/chat", json={"message": "Delete this file"})
     task_id = chat_resp.json()["task_id"]
     resp = await client.post(f"/tasks/{task_id}/cancel")
     assert resp.status_code == 200
@@ -85,7 +85,7 @@ async def test_cancel_task(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_cancel_already_cancelled(client: AsyncClient) -> None:
-    chat_resp = await client.post("/chat", json={"message": "Cancel twice"})
+    chat_resp = await client.post("/chat", json={"message": "Remove old configs"})
     task_id = chat_resp.json()["task_id"]
     await client.post(f"/tasks/{task_id}/cancel")
     resp = await client.post(f"/tasks/{task_id}/cancel")
@@ -100,7 +100,7 @@ async def test_cancel_not_found(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_get_steps(client: AsyncClient) -> None:
-    chat_resp = await client.post("/chat", json={"message": "Plan this"})
+    chat_resp = await client.post("/chat", json={"message": "Build this feature"})
     task_id = chat_resp.json()["task_id"]
     resp = await client.get(f"/tasks/{task_id}/steps")
     assert resp.status_code == 200
@@ -118,7 +118,7 @@ async def test_get_steps_not_found(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_retry_not_failed(client: AsyncClient) -> None:
-    chat_resp = await client.post("/chat", json={"message": "Try"})
+    chat_resp = await client.post("/chat", json={"message": "Run the tests"})
     task_id = chat_resp.json()["task_id"]
     resp = await client.post(f"/tasks/{task_id}/retry")
     assert resp.status_code == 409

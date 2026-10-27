@@ -2,6 +2,7 @@
 
 import enum
 from datetime import UTC, datetime
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -79,12 +80,23 @@ def validate_transition(current: TaskStatus, target: TaskStatus) -> None:
         raise InvalidTransitionError(current, target)
 
 
+class ChatTurn(BaseModel):
+    """One earlier message in the conversation, sent for context."""
+
+    role: Literal["user", "assistant"]
+    content: str = Field(max_length=20000)
+
+
 class ChatRequest(BaseModel):
     """Input model for a natural-language user request."""
 
     message: str = Field(min_length=1, max_length=5000)
     project_id: str | None = None
     priority: TaskPriority = TaskPriority.NORMAL
+    # Earlier turns of the same conversation (oldest first), for context.
+    history: list[ChatTurn] = Field(default_factory=list, max_length=100)
+    # Client-side conversation id; stored on tasks so they link back to the chat.
+    conversation_id: str | None = Field(default=None, max_length=100)
 
 
 class Task(BaseModel):
@@ -108,6 +120,19 @@ class Task(BaseModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     started_at: datetime | None = None
     completed_at: datetime | None = None
+
+
+class ChatResponse(BaseModel):
+    """Response from the orchestrator's handle_chat method."""
+
+    task_id: str | None = None
+    title: str
+    status: str
+    plan: list[str] = Field(default_factory=list)
+    answer: str | None = None
+    message: str
+    # Tools the model ran: {id, name, label, args, status, output}.
+    tool_calls: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class TaskSummary(BaseModel):

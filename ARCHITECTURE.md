@@ -21,7 +21,8 @@ Jarvis is a local-first personal AI orchestration system. It does not replace AI
 ┌───────▼──────────────▼───────────────▼──────────┐
 │                  API LAYER                      │
 │              FastAPI + WebSocket                │
-│  ┌──────────────────────────────────────────┐   │
+│  ┌───────────────────
+───────────────────────┐   │
 │  │ REST endpoints + WS for real-time events │   │
 │  └──────────────────────────────────────────┘   │
 └──────────────────────┬──────────────────────────┘

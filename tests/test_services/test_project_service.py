@@ -114,6 +114,56 @@ class TestListProjects:
         assert len(await service.list_projects(session, limit=3)) == 3
 
 
+class TestFindByName:
+    @pytest.mark.asyncio
+    async def test_exact_name_match(self, service: ProjectService, session: AsyncSession) -> None:
+        await service.create_project(session, name="MinaarTech", local_path="/mt")
+        results = await service.find_by_name(session, "MinaarTech")
+        assert len(results) == 1
+        assert results[0].name == "MinaarTech"
+
+    @pytest.mark.asyncio
+    async def test_substring_match(self, service: ProjectService, session: AsyncSession) -> None:
+        await service.create_project(session, name="MinaarTech", local_path="/mt")
+        results = await service.find_by_name(session, "minaar")
+        assert len(results) == 1
+        assert results[0].name == "MinaarTech"
+
+    @pytest.mark.asyncio
+    async def test_case_insensitive(self, service: ProjectService, session: AsyncSession) -> None:
+        await service.create_project(session, name="MinaarTech", local_path="/mt")
+        results = await service.find_by_name(session, "MINAARTECH")
+        assert len(results) == 1
+        assert results[0].name == "MinaarTech"
+
+    @pytest.mark.asyncio
+    async def test_no_match_empty_list(
+        self, service: ProjectService, session: AsyncSession
+    ) -> None:
+        await service.create_project(session, name="MinaarTech", local_path="/mt")
+        results = await service.find_by_name(session, "NoSuchProject")
+        assert results == []
+
+    @pytest.mark.asyncio
+    async def test_multiple_matches_ordered(
+        self, service: ProjectService, session: AsyncSession
+    ) -> None:
+        await service.create_project(session, name="AppAlpha", local_path="/a")
+        await service.create_project(session, name="AppBeta", local_path="/b")
+        await service.create_project(session, name="Other", local_path="/o")
+        results = await service.find_by_name(session, "App")
+        assert len(results) == 2
+        assert results[0].name == "AppAlpha"
+        assert results[1].name == "AppBeta"
+
+    @pytest.mark.asyncio
+    async def test_limit_respected(self, service: ProjectService, session: AsyncSession) -> None:
+        for i in range(5):
+            await service.create_project(session, name=f"Proj{i}", local_path=f"/{i}")
+        results = await service.find_by_name(session, "Proj", limit=3)
+        assert len(results) == 3
+
+
 class TestUpdateProject:
     @pytest.mark.asyncio
     async def test_update_name(self, service: ProjectService, session: AsyncSession) -> None:

@@ -1,6 +1,12 @@
 """Task API endpoints."""
 
+import json
+import logging
+from collections.abc import AsyncIterator
+from typing import Any
+
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,6 +34,7 @@ from jarvis.tools.base import InvalidOperationError, ToolError
 from jarvis.tools.registry import ToolNotFoundError
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _not_found(task_id: str) -> HTTPException:
@@ -37,20 +44,52 @@ def _not_found(task_id: str) -> HTTPException:
 @router.post("/chat")
 async def chat(
     request: ChatRequest,
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, str | list[str] | None]:
-    """Accept a natural-language request, create and plan a task."""
+    """Accept a natural-language request, classify intent, and route accordingly."""
     orchestrator = get_orchestrator()
-    task = await orchestrator.handle_chat(session, request)
-    steps = await orchestrator.task_service.get_steps(session, task.id)
-    return {
-        "task_id": task.id,
-        "title": task.title,
-        "status": task.status.value,
-        "priority": task.priority.value,
-        "plan": [s.description for s in steps],
-        "message": (f"Task {task.id} created and planned. Agent execution has not started yet."),
-    }
+    response = await orchestrator.handle_chat(session, request, background_tasks=background_tasks)
+    return response.model_dump()
+
+
+def _sse(event: dict[str, Any]) -> str:
+    return f"event: {event['type']}\ndata: {json.dumps(event, default=str)}\n\n"
+
+
+@router.post("/chat/stream")
+async def chat_stream(
+    request: ChatRequest, background_tasks: BackgroundTasks
+) -> StreamingResponse:
+    """Same as ``POST /chat`` but streams Server-Sent Events.
+
+    Events: ``token`` {text}, ``tool_start`` {id, name, label, args},
+    ``tool_end`` {id, name, ok, output}, ``task_created`` {task_id, title},
+    ``done`` {response: ChatResponse}, ``error`` {message}.
+    """
+    orchestrator = get_orchestrator()
+    db = get_database()
+
+    async def events() -> AsyncIterator[str]:
+        async with db.session() as session:
+            try:
+                async for event in orchestrator.stream_chat(
+                    session, request, background_tasks=background_tasks
+                ):
+                    if event["type"] == "done":
+                        event = {"type": "done", "response": event["response"].model_dump()}
+                    yield _sse(event)
+                await session.commit()
+            except Exception:
+                logger.exception("Chat stream failed")
+                yield _sse({"type": "error", "message": "Something went wrong. Please try again."})
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        background=background_tasks,
+    )
 
 
 @router.get("/tasks")
@@ -162,6 +201,7 @@ async def dispatch_task(
                 await orchestrator.dispatch_task(bg_session, task_id)
             except Exception:
                 import logging
+
                 logging.getLogger(__name__).exception(
                     "Background dispatch failed for task %s", task_id
                 )
@@ -185,9 +225,7 @@ async def list_executions(
     if orchestrator.agent_execution_service is None:
         raise HTTPException(status_code=500, detail="Agent execution service not configured")
 
-    return await orchestrator.agent_execution_service.list_executions_for_task(
-        session, task_id
-    )
+    return await orchestrator.agent_execution_service.list_executions_for_task(session, task_id)
 
 
 class ToolExecuteRequest(BaseModel):
@@ -258,9 +296,7 @@ async def execute_tool(
         raise HTTPException(status_code=403, detail=str(e))
 
     try:
-        result = await tool.execute(
-            operation, request.working_dir, **request.kwargs
-        )
+        result = await tool.execute(operation, request.working_dir, **request.kwargs)
     except ToolError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
