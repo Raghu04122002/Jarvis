@@ -80,6 +80,10 @@ async def test_settings_endpoints(client: AsyncClient) -> None:
     resp = await client.patch("/settings", json={"keys": {"nope": "x"}})
     assert resp.status_code == 422
 
+    resp = await client.put("/settings", json={"persona": "Via PUT."})
+    assert resp.status_code == 200
+    assert resp.json()["persona"] == "Via PUT."
+
     resp = await client.post("/settings/test")
     assert resp.status_code == 200
     body = resp.json()

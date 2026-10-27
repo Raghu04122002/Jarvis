@@ -2,7 +2,7 @@
 
 import json
 from collections.abc import AsyncIterator
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -66,7 +66,14 @@ class FakeStreamAI:
 
 class FakeSearch(WebSearchBackend):
     async def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
-        return [SearchResult("Real headline", "https://example.com/a", "snippet")]
+        return [
+            SearchResult(
+                "Real headline",
+                "https://example.com/a",
+                "Big story about the real headline.",
+                datetime.now(UTC).isoformat(),
+            )
+        ]
 
 
 @pytest.fixture
@@ -338,9 +345,10 @@ async def test_invented_links_are_removed_after_search(session: AsyncSession) ->
     )
     orch, _ = _orch(ai, FakeSearch())
     resp = await orch.handle_chat(session, ChatRequest(message="today's top news"))
-    assert "[Real](https://example.com/a)" in (resp.answer or "")
-    assert "https://made.up/x" not in (resp.answer or "")
-    assert "Fake *(unverified source removed)*" in (resp.answer or "")
+    answer = resp.answer or ""
+    assert answer.startswith("- Real — [Example](https://example.com/a)")
+    assert "made.up" not in answer and "Fake" not in answer
+    assert "1 line removed" in answer
 
 
 @pytest.mark.asyncio
@@ -351,4 +359,102 @@ async def test_gpt_oss_citation_markers_become_links(session: AsyncSession) -> N
     )
     orch, _ = _orch(ai, FakeSearch())
     resp = await orch.handle_chat(session, ChatRequest(message="today's top news"))
-    assert resp.answer == "1. Big story ([AP](https://example.com/a))\n2. Other"
+    answer = resp.answer or ""
+    assert answer.startswith("1. Big story — [Example](https://example.com/a)\n")
+    assert "Nowhere" not in answer  # marker for a result that doesn't exist is dropped
+    assert "*Covers " in answer
+
+
+# --- freshness ----------------------------------------------------------------
+
+
+class DatedSearch(WebSearchBackend):
+    def __init__(self, *items: tuple[str, str]) -> None:
+        self.items = items
+
+    async def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
+        return [
+            SearchResult(f"Story {i}", url, "text", pub) for i, (url, pub) in enumerate(self.items)
+        ]
+
+
+@pytest.mark.asyncio
+async def test_fresh_only_drops_old_and_undated_results() -> None:
+    from datetime import date
+
+    from jarvis.services.chat_tools import web_search_tool
+
+    backend = DatedSearch(
+        ("https://a.com/x", "2026-10-27T08:00:00Z"),  # today
+        ("https://b.com/y", "2026-10-26"),  # yesterday, < 48h
+        ("https://c.com/z", "2026-10-20"),  # a week old
+        ("https://d.com/w", ""),  # no date anywhere
+    )
+    tool = web_search_tool(backend, fresh_only=True, today=date(2026, 10, 27))
+    data = json.loads(await tool.handler({"query": "news"}))
+    assert [r["url"] for r in data] == ["https://a.com/x", "https://b.com/y"]
+    assert data[0]["date"] == "2026-10-27" and data[0]["source"]
+
+    stale = web_search_tool(
+        DatedSearch(("https://c.com/z", "2026-10-20")), fresh_only=True, today=date(2026, 10, 27)
+    )
+    out = await stale.handler({"query": "news"})
+    assert "No results" in out and "48 hours" in out
+
+
+@pytest.mark.asyncio
+async def test_not_time_sensitive_keeps_undated_results() -> None:
+    from datetime import date
+
+    from jarvis.services.chat_tools import web_search_tool
+
+    tool = web_search_tool(DatedSearch(("https://d.com/w", "")), today=date(2026, 10, 27))
+    data = json.loads(await tool.handler({"query": "python 3.13 release notes"}))
+    assert data[0]["url"] == "https://d.com/w" and data[0]["date"] is None
+
+
+def test_search_output_always_valid_json() -> None:
+    from jarvis.services.chat_tools import _MAX_TOOL_OUTPUT, _results_json
+    from jarvis.services.search_grounding import GroundedResult
+
+    big = [
+        GroundedResult(f"Title {i}", f"https://x.com/{i}", "word " * 400, "X", "2026-10-27")
+        for i in range(10)
+    ]
+    out = _results_json(big)
+    assert len(out) < _MAX_TOOL_OUTPUT
+    data = json.loads(out)
+    assert len(data) >= 5 and data[0]["url"] == "https://x.com/0"
+
+
+@pytest.mark.asyncio
+async def test_half_bracket_links_are_grounded(session: AsyncSession) -> None:
+    ai = FakeStreamAI(
+        ("call", "web_search", {"query": "news"}),
+        "- Big story about the real headline【Example](https://example.com/a)\n"
+        "These are the most prominent stories across selected outlets.",
+    )
+    orch, _ = _orch(ai, FakeSearch())
+    resp = await orch.handle_chat(session, ChatRequest(message="today's top news"))
+    answer = resp.answer or ""
+    assert answer.startswith(
+        "- Big story about the real headline — [Example](https://example.com/a)"
+    )
+    assert "prominent" not in answer and "【" not in answer
+
+
+@pytest.mark.asyncio
+async def test_mostly_unsupported_news_falls_back_to_verbatim_headlines(
+    session: AsyncSession,
+) -> None:
+    ai = FakeStreamAI(
+        ("call", "web_search", {"query": "news"}),
+        "- Aliens landed and markets crashed 【Example】\n- The war is over, experts say",
+    )
+    orch, _ = _orch(ai, FakeSearch())
+    resp = await orch.handle_chat(session, ChatRequest(message="today's top news"))
+    answer = resp.answer or ""
+    assert answer.startswith("Jarvis's summary didn't match its sources")
+    assert "- Big story about the real headline. — [Example](https://example.com/a)" in answer
+    assert "Aliens" not in answer and "war is over" not in answer
+    assert "*Covers " in answer

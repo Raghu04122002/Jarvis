@@ -32,10 +32,17 @@ from jarvis.services.chat_tools import (
     Toolbox,
     ToolHandler,
     WebSearchBackend,
+    parse_search_output,
     web_search_tool,
 )
 from jarvis.services.memory_service import MemoryService
 from jarvis.services.project_service import ProjectService
+from jarvis.services.search_grounding import (
+    coverage_line,
+    ground_answer,
+    is_time_sensitive,
+    verbatim_headlines,
+)
 from jarvis.services.task_service import TaskService
 
 if TYPE_CHECKING:
@@ -193,7 +200,8 @@ class Orchestrator:
             agent = task.metadata.get("agent_name", "the default agent")
             return f"Created task {task.id} '{task.title}'. It is being dispatched to {agent}."
 
-        toolbox = self._chat_toolbox(session, create_task_tool)
+        time_sensitive = is_time_sensitive(chat.message)
+        toolbox = self._chat_toolbox(session, create_task_tool, fresh_only=time_sensitive)
         context = await self._project_context(session, resolved_project_id)
         system = build_system_prompt(
             toolbox,
@@ -255,8 +263,11 @@ class Orchestrator:
         searched = [c for c in tool_log if c["name"] == "web_search" and c["status"] == "done"]
         if searched:
             allowed = {u for c in searched for u in _URL_RE.findall(c["output"])}
+            # gpt-oss sometimes opens a link with its citation bracket: "【AP](url)".
+            answer = re.sub(r"【([^】\[\]\n]+)\]\(", r"[\1](", answer)
             answer = _convert_citation_markers(answer, _search_urls(searched[-1]["output"]))
             answer = _strip_unverified_links(answer, allowed)
+            answer = _ground(answer, searched, chat.message, time_sensitive)
         if error is not None:
             sep = "\n\n" if answer else ""
             answer = f"{answer}{sep}{error}"
@@ -302,11 +313,13 @@ class Orchestrator:
         self,
         session: AsyncSession,
         create_task_handler: ToolHandler,
+        *,
+        fresh_only: bool = False,
     ) -> Toolbox:
         """The exact tools the chat model gets this turn."""
         toolbox = Toolbox()
         if self._search_backend is not None:
-            toolbox.add(web_search_tool(self._search_backend))
+            toolbox.add(web_search_tool(self._search_backend, fresh_only=fresh_only))
         toolbox.add(
             Tool(
                 name="create_task",
@@ -969,6 +982,20 @@ def _search_urls(output: str) -> list[str]:
     return [str(r.get("url", "")) for r in data if isinstance(r, dict)]
 
 
+_ITEM_RE = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+|^\s*\|")
+
+
+def _link_source_markers(answer: str, results: list[Any]) -> str:
+    """Turn gpt-oss's 【Source name】 markers into links to that source's result."""
+    by_name = {r.source.lower(): r.url for r in results}
+
+    def repl(m: re.Match[str]) -> str:
+        url = by_name.get(m.group(1).strip().lower())
+        return f" [{m.group(1).strip()}]({url})" if url else ""
+
+    return re.sub(r"\s*【([^】†\[\]\n]{1,60})】", repl, answer)
+
+
 def _convert_citation_markers(answer: str, urls: list[str]) -> str:
     def repl(m: re.Match[str]) -> str:
         idx = int(m.group(1))
@@ -978,3 +1005,48 @@ def _convert_citation_markers(answer: str, urls: list[str]) -> str:
         return ""
 
     return _CITE_RE.sub(repl, answer)
+
+
+def _ground(
+    answer: str, searched: list[dict[str, Any]], question: str, time_sensitive: bool
+) -> str:
+    """Keep only lines the search results support, attributed to their source.
+
+    For news / "today" questions also say which days the sources cover.
+    """
+    results = []
+    seen: set[str] = set()
+    for call in searched:
+        for r in parse_search_output(call["output"]):
+            if r.url not in seen:
+                seen.add(r.url)
+                results.append(r)
+    if not results or not answer:
+        return answer
+    answer = _link_source_markers(answer, results)
+    report = ground_answer(answer, results, question)
+    text = report.answer
+    kept = sum(1 for ln in text.splitlines() if _ITEM_RE.match(ln))
+    dropped = sum(1 for ln in report.removed if _ITEM_RE.match(ln))
+    if time_sensitive and dropped and kept < dropped:
+        # Most of the model's summary wasn't in the sources. Show the headlines
+        # exactly as published instead of a mostly-empty answer.
+        fallback = verbatim_headlines(results)
+        if fallback:
+            return (
+                "Jarvis's summary didn't match its sources closely enough, so here are "
+                "the headlines as the outlets published them:\n\n"
+                f"{fallback}\n\n{coverage_line(results)}"
+            ).strip()
+    if report.removed:
+        n = len(report.removed)
+        text += (
+            f"\n\n*{n} line{'s' if n != 1 else ''} removed because the search results "
+            f"didn't support {'them' if n != 1 else 'it'}.*"
+        )
+    if time_sensitive:
+        cited = [r for r in results if r.url in text] or results
+        line = coverage_line(cited)
+        if line:
+            text += f"\n\n{line}"
+    return text

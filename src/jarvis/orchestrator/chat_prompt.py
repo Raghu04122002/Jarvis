@@ -28,6 +28,9 @@ explain how to add one, or summarise a page if you paste it."
 - When you use web_search, base the answer only on the results. Cite each item \
 inline as a Markdown link [source name](url) using the exact URL returned. Never use \
 numbered markers like [1] or 【1】.
+- For news, put one story per line, cite the one source it came from, and reuse the \
+snippet's own wording. Don't merge stories from different sources into one line and \
+don't add analysis, impact or conclusions the snippet doesn't state.
 - Only list items that actually appear in the results. If the user asks for 10 and \
 the results support 6, give 6 and say so. Never fill gaps with examples or guesses.
 - General knowledge is fine to answer from memory, but say so if it may be out of date.

@@ -12,9 +12,17 @@ import logging
 import os
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Any
 
 import httpx
+
+from jarvis.services.search_grounding import (
+    GroundedResult,
+    extract_date,
+    fresh_cutoff,
+    source_name,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +110,7 @@ class SearchResult:
     title: str
     url: str
     snippet: str
+    published: str = ""  # backend-supplied publication timestamp, if any
 
 
 class WebSearchBackend:
@@ -153,7 +162,12 @@ class TavilyWebSearch(WebSearchBackend):
             resp.raise_for_status()
             data = resp.json()
         return [
-            SearchResult(r.get("title", ""), r.get("url", ""), (r.get("content") or "")[:600])
+            SearchResult(
+                r.get("title", ""),
+                r.get("url", ""),
+                (r.get("content") or "")[:600],
+                r.get("published_date") or "",
+            )
             for r in data.get("results", [])
             if r.get("url")
         ]
@@ -175,7 +189,12 @@ class BraveWebSearch(WebSearchBackend):
             resp.raise_for_status()
             data = resp.json()
         return [
-            SearchResult(r.get("title", ""), r.get("url", ""), (r.get("description") or "")[:600])
+            SearchResult(
+                r.get("title", ""),
+                r.get("url", ""),
+                (r.get("description") or "")[:600],
+                r.get("page_age") or "",
+            )
             for r in data.get("web", {}).get("results", [])
             if r.get("url")
         ]
@@ -197,27 +216,119 @@ def make_search_backend(provider: str, ollama_api_key: str = "") -> WebSearchBac
     return None
 
 
-def web_search_tool(backend: WebSearchBackend) -> Tool:
+def ground_results(results: list[SearchResult], today: date) -> list[GroundedResult]:
+    """Attach a publisher name and an absolute date (or None) to each result."""
+    out = []
+    for r in results:
+        d = extract_date(r.url, r.title, r.snippet, r.published, today=today)
+        out.append(
+            GroundedResult(
+                title=r.title,
+                url=r.url,
+                snippet=r.snippet,
+                source=source_name(r.url, r.title),
+                date=d.isoformat() if d else None,
+            )
+        )
+    return out
+
+
+def parse_search_output(output: str) -> list[GroundedResult]:
+    """Read back the JSON a ``web_search`` call returned (empty if it wasn't JSON)."""
+    try:
+        data = json.loads(output)
+    except ValueError:
+        return []
+    if not isinstance(data, list):
+        return []
+    return [
+        GroundedResult(
+            title=str(r.get("title", "")),
+            url=str(r.get("url", "")),
+            snippet=str(r.get("snippet", "")),
+            source=str(r.get("source", "")) or source_name(str(r.get("url", ""))),
+            date=r.get("date") or None,
+        )
+        for r in data
+        if isinstance(r, dict) and r.get("url")
+    ]
+
+
+def _results_json(results: list[GroundedResult], limit: int = _MAX_TOOL_OUTPUT - 200) -> str:
+    """Serialise results as JSON that always fits in the tool-output limit.
+
+    Toolbox truncates long outputs, and truncated JSON can't be parsed by the
+    grounding step or the tool view, so shorten snippets (then drop the
+    lowest-ranked results) until the whole list fits.
+    """
+
+    def dump(items: list[GroundedResult], snip: int) -> str:
+        return json.dumps(
+            [
+                {
+                    "title": r.title,
+                    "url": r.url,
+                    "source": r.source,
+                    "date": r.date,
+                    "snippet": r.snippet if len(r.snippet) <= snip else r.snippet[:snip] + "…",
+                }
+                for r in items
+            ],
+            ensure_ascii=False,
+        )
+
+    items = list(results)
+    while items:
+        for snip in (600, 400, 250, 150):
+            out = dump(items, snip)
+            if len(out) <= limit:
+                return out
+        items.pop()
+    return "[]"
+
+
+def web_search_tool(
+    backend: WebSearchBackend,
+    *,
+    fresh_only: bool = False,
+    today: date | None = None,
+) -> Tool:
+    """The ``web_search`` tool.
+
+    With ``fresh_only`` (news / "today" questions) results not dated within the
+    last 48 hours - or with no findable date - are dropped before the model
+    sees them.
+    """
+
     async def handler(args: dict[str, Any]) -> str:
         query = str(args.get("query", "")).strip()
         if not query:
             return "No query given."
         n = int(args.get("max_results") or 5)
-        results = await backend.search(query, max(1, min(n, 10)))
+        day = today or date.today()
+        results = ground_results(await backend.search(query, max(1, min(n, 10))), day)
         if not results:
             return f"No results for {query!r}."
-        return json.dumps(
-            [{"title": r.title, "url": r.url, "snippet": r.snippet} for r in results],
-            ensure_ascii=False,
-        )
+        if fresh_only:
+            cutoff = fresh_cutoff(day)
+            fresh = [r for r in results if r.date and r.date >= cutoff.isoformat()]
+            if not fresh:
+                return (
+                    f"No results for {query!r} are dated within the last 48 hours "
+                    f"({len(results)} older or undated results were dropped). "
+                    "Tell the user you couldn't find current coverage; do not use older news."
+                )
+            results = fresh
+        return _results_json(results)
 
     return Tool(
         name="web_search",
         label="Searching web",
         description=(
             "Search the live web. Use for news, current events, prices, weather, "
-            "recent releases, or any fact that may have changed. Returns titles, URLs "
-            "and snippets; cite the URLs you use."
+            "recent releases, or any fact that may have changed. Returns title, url, "
+            "source, date and snippet per result. Only state what a snippet says, "
+            "and end each line with the source name linked to its url."
         ),
         parameters={
             "type": "object",

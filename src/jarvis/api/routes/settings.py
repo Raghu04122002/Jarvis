@@ -35,6 +35,7 @@ async def get_settings() -> SettingsView:
 
 
 @router.patch("/settings")
+@router.put("/settings")
 async def update_settings(patch: SettingsUpdate) -> SettingsView:
     try:
         return get_settings_service().update(patch)
