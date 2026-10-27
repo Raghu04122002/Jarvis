@@ -10,7 +10,7 @@ export class ApiError extends Error {
   }
 }
 
-function getBaseUrl(): string {
+export function getBaseUrl(): string {
   return (
     localStorage.getItem("jarvis_backend_url") ?? DEFAULT_BACKEND_URL
   );

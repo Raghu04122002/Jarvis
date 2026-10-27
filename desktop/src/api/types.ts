@@ -73,21 +73,53 @@ export interface TaskSummary {
   updated_at: string;
 }
 
+export interface ChatTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
 export interface ChatRequest {
   message: string;
   project_id?: string;
   priority?: TaskPriority;
+  /** Earlier turns of this conversation, oldest first. */
+  history?: ChatTurn[];
+  conversation_id?: string;
+}
+
+export interface ToolCall {
+  id: string;
+  name: string;
+  label: string;
+  args: Record<string, unknown>;
+  status: "running" | "done" | "error";
+  output: string;
 }
 
 export interface ChatResponse {
-  task_id?: string;
+  task_id?: string | null;
   title: string;
   status: string;
   priority?: TaskPriority;
   plan?: string[];
   message: string;
-  answer?: string;
+  answer?: string | null;
+  tool_calls?: ToolCall[];
 }
+
+export type ChatStreamEvent =
+  | { type: "token"; text: string }
+  | {
+      type: "tool_start";
+      id: string;
+      name: string;
+      label: string;
+      args: Record<string, unknown>;
+    }
+  | { type: "tool_end"; id: string; name: string; ok: boolean; output: string }
+  | { type: "task_created"; task_id: string; title: string }
+  | { type: "done"; response: ChatResponse }
+  | { type: "error"; message: string };
 
 export interface DispatchResponse {
   task_id: string;

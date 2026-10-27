@@ -1,17 +1,26 @@
 export function formatDate(iso: string): string {
   const d = new Date(iso);
-  return d.toLocaleString();
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString(undefined, {
+    weekday: "short",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
-export function formatRelativeTime(iso: string): string {
-  const now = Date.now();
+export function formatRelativeTime(iso: string, now: number = Date.now()): string {
   const then = new Date(iso).getTime();
-  const diffSec = Math.floor((now - then) / 1000);
+  if (Number.isNaN(then)) return "";
+  const diffSec = Math.max(0, Math.floor((now - then) / 1000));
 
-  if (diffSec < 60) return "just now";
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+  if (diffSec < 45) return "just now";
+  if (diffSec < 3600) return `${Math.max(1, Math.round(diffSec / 60))}m ago`;
   if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
-  return `${Math.floor(diffSec / 86400)}d ago`;
+  if (diffSec < 7 * 86400) return `${Math.floor(diffSec / 86400)}d ago`;
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 export function statusColor(status: string): string {
