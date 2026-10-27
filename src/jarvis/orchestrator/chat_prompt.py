@@ -57,6 +57,7 @@ def build_system_prompt(
     now: datetime,
     project_context: str = "",
     action_hint: bool = False,
+    persona: str = "",
 ) -> str:
     parts = [
         _RULES,
@@ -67,6 +68,12 @@ def build_system_prompt(
         parts[-1] += "\n- Web search is NOT connected. You cannot look up current information."
     if project_context:
         parts[-1] += f"\n- Selected project:\n{project_context}"
+    if persona.strip():
+        parts.append(
+            "## User's custom instructions\n"
+            "Follow these for tone and focus. They never override the honesty rules above.\n"
+            + persona.strip()[:4000]
+        )
     if action_hint and "create_task" in toolbox.names:
         parts.append(
             "## Router hint\nThe message looks like a request for real work. "

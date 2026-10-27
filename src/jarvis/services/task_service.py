@@ -6,6 +6,7 @@ All task business logic lives here, not in API route handlers.
 import logging
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -246,13 +247,14 @@ class TaskService:
             TaskStatus.CANCELLED: EventType.TASK_CANCELLED,
         }.get(target_status, EventType.TASK_STATE_CHANGED)
 
-        self._event_bus.publish(
-            Event(
-                type=event_type,
-                task_id=task_id,
-                data={"from": current_status.value, "to": target_status.value},
-            )
-        )
+        data: dict[str, Any] = {
+            "from": current_status.value,
+            "to": target_status.value,
+            "title": row.title,
+        }
+        if target_status == TaskStatus.FAILED and row.error:
+            data["error"] = row.error[:300]
+        self._event_bus.publish(Event(type=event_type, task_id=task_id, data=data))
         return _row_to_task(row)
 
     async def cancel_task(self, session: AsyncSession, task_id: str) -> Task:

@@ -42,3 +42,6 @@ htmlcov/
 # Distribution
 *.tar.gz
 *.whl
+
+# Local runtime data (settings with API keys)
+/data/

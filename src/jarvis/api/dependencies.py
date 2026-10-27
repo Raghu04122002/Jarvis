@@ -1,6 +1,8 @@
 """Shared application dependencies — singleton instances for the API layer."""
 
+import tempfile
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +27,7 @@ from jarvis.services.notification_service import NotificationService
 from jarvis.services.project_service import ProjectService
 from jarvis.services.pxpipe_service import PxpipeService
 from jarvis.services.scheduler_service import SchedulerService
+from jarvis.services.settings_service import SettingsService
 from jarvis.services.task_service import TaskService
 from jarvis.services.voice_service import VoiceService
 from jarvis.tools.browser_tool import BrowserTool
@@ -49,6 +52,7 @@ _notification_service: NotificationService | None = None
 _ai_service: AIService | None = None
 _pxpipe_service: PxpipeService | None = None
 _voice_service: VoiceService | None = None
+_settings_service: SettingsService | None = None
 
 
 def init_dependencies(config: JarvisConfig | None = None) -> None:
@@ -56,7 +60,7 @@ def init_dependencies(config: JarvisConfig | None = None) -> None:
     global _orchestrator, _audit_logger, _database, _event_bus, _project_service
     global _agent_execution_service, _memory_service, _tool_registry, _permission_gate
     global _approval_service, _scheduler_service, _scheduler_engine, _notification_service
-    global _ai_service, _pxpipe_service, _voice_service
+    global _ai_service, _pxpipe_service, _voice_service, _settings_service
 
     if config is None:
         config = load_config()
@@ -73,9 +77,7 @@ def init_dependencies(config: JarvisConfig | None = None) -> None:
 
     # AI + pxpipe services
     _pxpipe_service = (
-        PxpipeService()
-        if config.ai.pxpipe_enabled and config.ai.provider == "anthropic"
-        else None
+        PxpipeService() if config.ai.pxpipe_enabled and config.ai.provider == "anthropic" else None
     )
     _ai_service = AIService(config.ai)
 
@@ -135,13 +137,17 @@ def init_dependencies(config: JarvisConfig | None = None) -> None:
         poll_interval_seconds=config.scheduler.poll_interval_seconds,
     )
 
+    # Settings saved from the desktop app override the config file.
+    _settings_service = SettingsService(config.ai, _ai_service, _orchestrator)
+    _settings_service.apply()
+
 
 def init_dependencies_with_db(db: Database) -> None:
     """Initialize dependencies with a pre-configured database (for tests)."""
     global _orchestrator, _audit_logger, _database, _event_bus, _project_service
     global _agent_execution_service, _memory_service, _tool_registry, _permission_gate
     global _approval_service, _scheduler_service, _scheduler_engine, _notification_service
-    global _ai_service, _pxpipe_service, _voice_service
+    global _ai_service, _pxpipe_service, _voice_service, _settings_service
 
     _event_bus = EventBus()
     _audit_logger = AuditLogger(_event_bus)
@@ -188,6 +194,13 @@ def init_dependencies_with_db(db: Database) -> None:
         _database,
         _event_bus,
         _notification_service,
+    )
+    # Tests never touch the real settings file.
+    _settings_service = SettingsService(
+        AIConfig(pxpipe_enabled=False),
+        _ai_service,
+        _orchestrator,
+        path=Path(tempfile.mkdtemp(prefix="jarvis-settings-")) / "settings.json",
     )
 
 
@@ -293,6 +306,12 @@ def get_voice_service() -> VoiceService:
     return _voice_service
 
 
+def get_settings_service() -> SettingsService:
+    if _settings_service is None:
+        raise RuntimeError("Dependencies not initialized")
+    return _settings_service
+
+
 def get_notification_service() -> NotificationService:
     if _notification_service is None:
         init_dependencies()
@@ -313,7 +332,7 @@ def reset_dependencies() -> None:
     global _orchestrator, _audit_logger, _database, _event_bus, _project_service
     global _agent_execution_service, _memory_service, _tool_registry, _permission_gate
     global _approval_service, _scheduler_service, _scheduler_engine, _notification_service
-    global _ai_service, _pxpipe_service, _voice_service
+    global _ai_service, _pxpipe_service, _voice_service, _settings_service
     if _event_bus is not None:
         _event_bus.clear()
     _orchestrator = None
@@ -332,3 +351,4 @@ def reset_dependencies() -> None:
     _ai_service = None
     _pxpipe_service = None
     _voice_service = None
+    _settings_service = None

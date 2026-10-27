@@ -36,6 +36,17 @@ class AIService:
     """Conversational chat over the configured LLM provider."""
 
     def __init__(self, config: AIConfig) -> None:
+        self._pxpipe_url_override: str | None = None
+        self._pxpipe_url_resolved = False
+        self._configure(config)
+
+    def reconfigure(self, config: AIConfig) -> None:
+        """Apply new settings (provider, model, keys) without a restart."""
+        self._configure(config)
+        if self._pxpipe_enabled and self._pxpipe_url_resolved:
+            self.set_pxpipe_base_url(self._pxpipe_url_override)
+
+    def _configure(self, config: AIConfig) -> None:
         self._provider = config.provider
         self._max_tokens = config.max_tokens
         self._pxpipe_enabled = config.pxpipe_enabled and self._provider == "anthropic"
@@ -67,6 +78,11 @@ class AIService:
         return self._provider
 
     @property
+    def model(self) -> str:
+        """The model chat currently uses."""
+        return self._ollama_model if self._provider == "ollama" else self._model
+
+    @property
     def _ollama_requires_key(self) -> bool:
         """Ollama Cloud needs an API key; a local daemon does not."""
         return _OLLAMA_CLOUD_HOST in self._ollama_base_url
@@ -79,6 +95,8 @@ class AIService:
 
     def set_pxpipe_base_url(self, base_url: str | None) -> None:
         """Update the base URL (e.g., after pxpipe health check resolves)."""
+        self._pxpipe_url_override = base_url
+        self._pxpipe_url_resolved = True
         self._client = anthropic.AsyncAnthropic(
             api_key=self._client.api_key,
             base_url=base_url,

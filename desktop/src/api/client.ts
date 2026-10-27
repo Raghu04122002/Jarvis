@@ -16,6 +16,20 @@ export function getBaseUrl(): string {
   );
 }
 
+/** FastAPI errors carry `detail` as a string, or a list of validation errors (422). */
+function detailText(body: unknown): string | undefined {
+  const detail = (body as { detail?: unknown } | null)?.detail;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((d: { loc?: unknown[]; msg?: string }) =>
+        [d.loc?.slice(1).join("."), d.msg].filter(Boolean).join(": "),
+      )
+      .join("; ");
+  }
+  return undefined;
+}
+
 export async function apiFetch<T>(
   path: string,
   options: RequestInit = {},
@@ -31,10 +45,7 @@ export async function apiFetch<T>(
 
   if (!resp.ok) {
     const body = await resp.json().catch(() => ({ detail: resp.statusText }));
-    throw new ApiError(
-      resp.status,
-      (body as { detail?: string }).detail ?? resp.statusText,
-    );
+    throw new ApiError(resp.status, detailText(body) ?? resp.statusText);
   }
 
   // 204 No Content (e.g. DELETE) has no body to parse.

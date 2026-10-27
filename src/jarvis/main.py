@@ -29,6 +29,7 @@ from jarvis.api.routes.health import router as health_router
 from jarvis.api.routes.memory import router as memory_router
 from jarvis.api.routes.projects import router as projects_router
 from jarvis.api.routes.schedules import router as schedules_router
+from jarvis.api.routes.settings import router as settings_router
 from jarvis.api.routes.tasks import router as tasks_router
 from jarvis.api.routes.voice import router as voice_router
 from jarvis.api.routes.workflows import router as workflows_router
@@ -136,6 +137,7 @@ def create_app(config: JarvisConfig | None = None) -> FastAPI:
     app.include_router(approvals_router)
     app.include_router(activity_router)
     app.include_router(schedules_router)
+    app.include_router(settings_router)
     app.include_router(events_router)
     app.include_router(voice_router)
     app.include_router(workflows_router)

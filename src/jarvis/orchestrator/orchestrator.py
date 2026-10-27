@@ -85,6 +85,8 @@ class Orchestrator:
         self._supervisor = supervisor
         self._review_max_rounds = max(0, review_max_rounds)
         self._search_backend = search_backend
+        self._disabled_tools: frozenset[str] = frozenset()
+        self._persona = ""
         self._active_agents: dict[str, BaseAgent] = {}
 
     async def handle_chat(
@@ -198,6 +200,7 @@ class Orchestrator:
             datetime.now().astimezone(),
             project_context=context if resolved_project_id else "",
             action_hint=intent.intent == IntentType.ACTION,
+            persona=self._persona,
         )
         messages = [{"role": t.role, "content": t.content} for t in chat.history[-20:]]
         messages.append({"role": "user", "content": chat.message})
@@ -378,7 +381,37 @@ class Orchestrator:
                     handler=list_projects,
                 )
             )
+        if self._disabled_tools:
+            toolbox.tools = [t for t in toolbox.tools if t.name not in self._disabled_tools]
         return toolbox
+
+    # --- Runtime settings ---
+
+    def apply_chat_settings(
+        self,
+        *,
+        search_backend: WebSearchBackend | None,
+        disabled_tools: frozenset[str],
+        persona: str,
+    ) -> None:
+        """Swap the search backend, tool toggles and persona without a restart."""
+        self._search_backend = search_backend
+        self._disabled_tools = disabled_tools
+        self._persona = persona
+
+    def chat_tool_catalog(self) -> list[tuple[str, str, str]]:
+        """(name, label, description) for every chat tool that could be enabled."""
+        saved = self._disabled_tools
+        self._disabled_tools = frozenset()
+        try:
+
+            async def _noop(args: dict[str, Any]) -> str:
+                return ""
+
+            toolbox = self._chat_toolbox(None, _noop)  # type: ignore[arg-type]
+        finally:
+            self._disabled_tools = saved
+        return [(t.name, t.label, t.description) for t in toolbox.tools]
 
     async def _create_task(
         self,

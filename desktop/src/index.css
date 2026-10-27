@@ -1,1 +1,77 @@
 @import "tailwindcss";
+
+/* `dark:` utilities follow the .dark class set by lib/theme.ts. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Design tokens. Components use Tailwind's gray/white/accent scales, so the
+ * dark theme works by remapping those scales rather than touching every
+ * component: grays invert, and pale accent tints become deep ones.
+ */
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --radius-card: 0.75rem;
+}
+
+.dark {
+  --color-white: #0f141b;
+  --color-gray-50: #151b23;
+  --color-gray-100: #1c232d;
+  --color-gray-200: #29313c;
+  --color-gray-300: #3a4350;
+  --color-gray-400: #6b7584;
+  --color-gray-500: #8d97a5;
+  --color-gray-600: #aab3bf;
+  --color-gray-700: #c7ced7;
+  --color-gray-800: #e1e6ec;
+  --color-gray-900: #f2f4f7;
+
+  --color-blue-50: #11233d;
+  --color-blue-100: #16305a;
+  --color-blue-200: #1e3f73;
+  --color-red-50: #3a1518;
+  --color-red-100: #4a1a1e;
+  --color-red-200: #6b2128;
+  --color-green-50: #102a1b;
+  --color-green-100: #143522;
+  --color-green-200: #1b4a2f;
+  --color-amber-50: #33240b;
+  --color-amber-100: #40300e;
+  --color-amber-200: #5c4413;
+  --color-orange-50: #3a1f0d;
+  --color-orange-100: #4a2810;
+  --color-orange-200: #6b3a16;
+  --color-yellow-50: #33300b;
+  --color-yellow-100: #3f3a0e;
+}
+
+/*
+ * Saturated fills (accent buttons, badges) and the always-dark slate sidebar
+ * keep real white text: reset the remapped white for everything inside them.
+ * Gray fills are excluded on purpose: they invert, so dark text is correct.
+ */
+.dark :is(
+    [class~="bg-blue-400"],
+    [class~="bg-blue-500"],
+    [class~="bg-blue-600"],
+    [class~="bg-blue-700"],
+    [class~="bg-green-500"],
+    [class~="bg-green-600"],
+    [class~="bg-green-700"],
+    [class~="bg-red-500"],
+    [class~="bg-red-600"],
+    [class~="bg-red-700"],
+    [class~="bg-orange-500"],
+    [class~="bg-orange-600"],
+    [class~="bg-slate-700"],
+    [class~="bg-slate-800"],
+    [class~="bg-slate-900"],
+    [class~="bg-slate-950"]
+  ) {
+  --color-white: #fff;
+}
+
+body {
+  background: var(--color-gray-50);
+  color: var(--color-gray-900);
+}
