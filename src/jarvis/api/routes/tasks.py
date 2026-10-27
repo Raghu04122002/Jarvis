@@ -96,13 +96,15 @@ async def chat_stream(
 async def list_tasks(
     status: TaskStatus | None = None,
     priority: TaskPriority | None = None,
+    project_id: str | None = None,
+    q: str | None = Query(None, max_length=200, description="Search title and request"),
     limit: int = Query(default=50, ge=1, le=200),
     session: AsyncSession = Depends(get_session),
 ) -> list[TaskSummary]:
-    """List tasks with optional filtering."""
+    """List tasks with optional filtering and search."""
     orchestrator = get_orchestrator()
     return await orchestrator.task_service.list_tasks(
-        session, status=status, priority=priority, limit=limit
+        session, status=status, priority=priority, project_id=project_id, query=q, limit=limit
     )
 
 
@@ -127,11 +129,15 @@ async def cancel_task(
     """Cancel a pending or running task."""
     orchestrator = get_orchestrator()
     try:
-        return await orchestrator.task_service.cancel_task(session, task_id)
+        task = await orchestrator.task_service.cancel_task(session, task_id)
+        await session.commit()
     except TaskNotFoundError:
         raise _not_found(task_id)
     except InvalidTransitionError as e:
         raise HTTPException(status_code=409, detail=str(e))
+    # Stop the agent process too, so a cancelled task stops doing work.
+    await orchestrator.cancel_agent_for_task(task_id)
+    return task
 
 
 @router.post("/tasks/{task_id}/retry")

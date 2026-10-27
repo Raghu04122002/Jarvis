@@ -184,3 +184,17 @@ class TaskStepRow(Base):
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ActivityEventRow(Base):
+    """A persisted EventBus event, so the Activity feed survives restarts."""
+
+    __tablename__ = "activity_events"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    task_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    data: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )

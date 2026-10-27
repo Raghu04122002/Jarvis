@@ -6,8 +6,17 @@ import type {
   DispatchResponse,
   Task,
   TaskStep,
+  TaskStatus,
   TaskSummary,
 } from "./types";
+
+export interface TaskListParams {
+  status?: TaskStatus;
+  /** Free-text search over title and request. */
+  q?: string;
+  projectId?: string;
+  limit?: number;
+}
 
 export const tasksApi = {
   chat(req: ChatRequest): Promise<ChatResponse> {
@@ -17,8 +26,13 @@ export const tasksApi = {
     });
   },
 
-  list(): Promise<TaskSummary[]> {
-    return apiFetch("/tasks");
+  list(params: TaskListParams = {}): Promise<TaskSummary[]> {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set("status", params.status);
+    if (params.q?.trim()) qs.set("q", params.q.trim());
+    if (params.projectId) qs.set("project_id", params.projectId);
+    qs.set("limit", String(params.limit ?? 200));
+    return apiFetch(`/tasks?${qs.toString()}`);
   },
 
   get(id: string): Promise<Task> {

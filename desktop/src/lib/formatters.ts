@@ -48,12 +48,15 @@ export function statusColor(status: string): string {
 export function statusBgColor(status: string): string {
   switch (status) {
     case "completed":
+    case "approved":
       return "bg-green-100 text-green-800";
     case "failed":
+    case "denied":
     case "error":
       return "bg-red-100 text-red-800";
     case "running":
     case "in_progress":
+    case "verifying":
       return "bg-blue-100 text-blue-800";
     case "pending":
     case "planning":
@@ -61,6 +64,7 @@ export function statusBgColor(status: string): string {
     case "cancelled":
       return "bg-gray-100 text-gray-600";
     case "awaiting_approval":
+    case "waiting_for_approval":
       return "bg-orange-100 text-orange-800";
     default:
       return "bg-gray-100 text-gray-600";

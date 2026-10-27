@@ -1,11 +1,34 @@
-import { useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { AlertTriangle, ArrowLeft, Bot, FolderGit2, MessageSquare, Play, RotateCcw, Square } from "lucide-react";
 import { useTaskStore } from "@/store/taskStore";
+import { useChatStore } from "@/store/chatStore";
+import { useProjectStore } from "@/store/projectStore";
+import { Markdown } from "@/components/common/Markdown";
+import { RelativeTime } from "@/components/common/RelativeTime";
+import { agentLabel, isActive } from "@/lib/taskStatus";
 import { TaskStatusBadge } from "./TaskStatusBadge";
 import { TaskSteps } from "./TaskSteps";
 import { ExecutionLog } from "./ExecutionLog";
-import { LoadingSpinner } from "@/components/common/LoadingSpinner";
-import { formatDate } from "@/lib/formatters";
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-xl border border-gray-200 bg-white p-4">
+      <h3 className="mb-3 text-sm font-semibold text-gray-700">{title}</h3>
+      {children}
+    </section>
+  );
+}
+
+function DetailSkeleton() {
+  return (
+    <div className="mx-auto max-w-4xl space-y-4 p-6" aria-hidden>
+      <div className="h-6 w-1/3 animate-pulse rounded bg-gray-200" />
+      <div className="h-28 animate-pulse rounded-xl bg-gray-100" />
+      <div className="h-40 animate-pulse rounded-xl bg-gray-100" />
+    </div>
+  );
+}
 
 export function TaskDetailView() {
   const { id } = useParams<{ id: string }>();
@@ -14,135 +37,185 @@ export function TaskDetailView() {
   const steps = useTaskStore((s) => s.steps);
   const executions = useTaskStore((s) => s.executions);
   const loading = useTaskStore((s) => s.loading);
+  const error = useTaskStore((s) => s.error);
   const fetchTask = useTaskStore((s) => s.fetchTask);
   const fetchSteps = useTaskStore((s) => s.fetchSteps);
   const fetchExecutions = useTaskStore((s) => s.fetchExecutions);
   const cancelTask = useTaskStore((s) => s.cancelTask);
   const retryTask = useTaskStore((s) => s.retryTask);
   const dispatchTask = useTaskStore((s) => s.dispatchTask);
+  const conversations = useChatStore((s) => s.conversations);
+  const selectChat = useChatStore((s) => s.selectChat);
+  const projects = useProjectStore((s) => s.projects);
+  const fetchProjects = useProjectStore((s) => s.fetchProjects);
+  const [busy, setBusy] = useState<null | "cancel" | "retry" | "start">(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (id) {
-      fetchTask(id);
-      fetchSteps(id);
-      fetchExecutions(id);
-    }
+    if (!id) return;
+    void fetchTask(id);
+    void fetchSteps(id);
+    void fetchExecutions(id);
   }, [id, fetchTask, fetchSteps, fetchExecutions]);
 
-  if (loading && !task) {
+  useEffect(() => {
+    if (projects.length === 0) void fetchProjects();
+  }, [projects.length, fetchProjects]);
+
+  const run = async (kind: "cancel" | "retry" | "start", fn: () => Promise<void>) => {
+    setBusy(kind);
+    setActionError(null);
+    try {
+      await fn();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Action failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (!task || task.id !== id) {
+    if (loading) return <DetailSkeleton />;
     return (
-      <div className="flex justify-center py-12">
-        <LoadingSpinner />
+      <div className="mx-auto max-w-4xl p-6 text-center">
+        <p className="text-sm text-gray-600">{error ? `Couldn't load this task: ${error}` : "Task not found."}</p>
+        <Link to="/tasks" className="mt-3 inline-block text-sm font-medium text-blue-600 hover:underline">
+          Back to tasks
+        </Link>
       </div>
     );
   }
 
-  if (!task) {
-    return (
-      <div className="p-6 text-center text-gray-400">Task not found</div>
-    );
-  }
+  const agent = agentLabel(task.metadata.agent_name);
+  const conversation = conversations.find((c) => c.id === task.metadata.conversation_id);
+  const project = projects.find((p) => p.id === task.project_id);
+  const canStart = task.status === "planning" || task.status === "created";
 
   return (
-    <div className="p-6 max-w-3xl mx-auto">
+    <div className="mx-auto max-w-4xl space-y-4 p-6">
       <button
+        type="button"
         onClick={() => navigate("/tasks")}
-        className="text-sm text-gray-500 hover:text-gray-700 mb-4"
+        className="inline-flex items-center gap-1 rounded text-sm text-gray-500 hover:text-gray-800 focus-visible:outline-2 focus-visible:outline-blue-500"
       >
-        ← Back to tasks
+        <ArrowLeft size={14} aria-hidden /> Tasks
       </button>
 
-      <div className="bg-white border border-gray-200 rounded-lg p-5 mb-4">
-        <div className="flex items-start justify-between mb-3">
-          <h2 className="text-lg font-semibold text-gray-800">{task.title}</h2>
-          <TaskStatusBadge status={task.status} />
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-semibold text-gray-900">{task.title}</h2>
+            <TaskStatusBadge status={task.status} />
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
+            <span className="font-mono">{task.id}</span>
+            {agent && (
+              <span className="inline-flex items-center gap-1" title={task.metadata.agent_reason}>
+                <Bot size={12} aria-hidden /> {agent}
+              </span>
+            )}
+            {project && (
+              <Link to={`/projects/${project.id}`} className="inline-flex items-center gap-1 hover:text-blue-600">
+                <FolderGit2 size={12} aria-hidden /> {project.name}
+              </Link>
+            )}
+            {conversation && (
+              <button
+                type="button"
+                onClick={() => {
+                  selectChat(conversation.id);
+                  navigate("/");
+                }}
+                className="inline-flex items-center gap-1 hover:text-blue-600"
+              >
+                <MessageSquare size={12} aria-hidden /> {conversation.title}
+              </button>
+            )}
+          </div>
         </div>
-
-        <p className="text-sm text-gray-600 mb-3">{task.request}</p>
-
-        {task.description && (
-          <p className="text-sm text-gray-500 mb-3">{task.description}</p>
-        )}
-
-        <div className="flex gap-4 text-xs text-gray-400 mb-4">
-          <span>Priority: {task.priority}</span>
-          <span>Created: {formatDate(task.created_at)}</span>
-          {task.started_at && <span>Started: {formatDate(task.started_at)}</span>}
-          {task.completed_at && (
-            <span>Completed: {formatDate(task.completed_at)}</span>
-          )}
-        </div>
-
-        {task.plan.length > 0 && (
-          <div className="mb-4">
-            <h3 className="text-sm font-semibold text-gray-700 mb-1">Plan</h3>
-            <ol className="text-sm text-gray-600 list-decimal pl-5 space-y-0.5">
-              {task.plan.map((step, i) => (
-                <li
-                  key={i}
-                  className={
-                    task.current_step === i ? "font-semibold text-blue-600" : ""
-                  }
-                >
-                  {step}
-                </li>
-              ))}
-            </ol>
-          </div>
-        )}
-
-        {task.result && (
-          <div className="bg-green-50 border border-green-200 rounded p-3 mb-4">
-            <h3 className="text-xs font-semibold text-green-700 mb-1">
-              Result
-            </h3>
-            <p className="text-sm text-green-800 whitespace-pre-wrap">
-              {task.result}
-            </p>
-          </div>
-        )}
-
-        {task.error && (
-          <div className="bg-red-50 border border-red-200 rounded p-3 mb-4">
-            <h3 className="text-xs font-semibold text-red-700 mb-1">Error</h3>
-            <p className="text-sm text-red-800">{task.error}</p>
-          </div>
-        )}
-
         <div className="flex gap-2">
-          {task.status === "planning" && (
+          {canStart && (
             <button
-              onClick={() => dispatchTask(task.id)}
-              className="px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700"
+              type="button"
+              disabled={busy !== null}
+              onClick={() => void run("start", () => dispatchTask(task.id))}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
-              Start Execution
-            </button>
-          )}
-          {["running", "planning", "waiting_for_approval"].includes(
-            task.status,
-          ) && (
-            <button
-              onClick={() => cancelTask(task.id)}
-              className="px-3 py-1.5 text-sm bg-red-600 text-white rounded hover:bg-red-700"
-            >
-              Cancel
+              <Play size={14} aria-hidden /> {busy === "start" ? "Starting…" : "Start now"}
             </button>
           )}
           {task.status === "failed" && (
             <button
-              onClick={() => retryTask(task.id)}
-              className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+              type="button"
+              disabled={busy !== null}
+              onClick={() => void run("retry", () => retryTask(task.id))}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
-              Retry
+              <RotateCcw size={14} aria-hidden /> {busy === "retry" ? "Retrying…" : "Retry"}
+            </button>
+          )}
+          {isActive(task.status) && (
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={() => void run("cancel", () => cancelTask(task.id))}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              <Square size={13} aria-hidden /> {busy === "cancel" ? "Cancelling…" : "Cancel"}
             </button>
           )}
         </div>
-      </div>
+      </header>
 
-      <div className="space-y-4">
-        <TaskSteps steps={steps} />
+      {actionError && (
+        <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {actionError}
+        </p>
+      )}
+
+      {task.status === "failed" && task.error && (
+        <div role="alert" className="flex gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
+          <AlertTriangle size={18} className="mt-0.5 shrink-0 text-red-600" aria-hidden />
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-red-800">This task failed</p>
+            <pre className="mt-1 whitespace-pre-wrap break-words font-sans text-sm text-red-700">{task.error}</pre>
+          </div>
+        </div>
+      )}
+
+      <dl className="grid grid-cols-2 gap-3 rounded-xl border border-gray-200 bg-white p-4 text-sm sm:grid-cols-4">
+        {(
+          [
+            ["Created", task.created_at],
+            ["Started", task.started_at],
+            ["Finished", task.completed_at],
+            ["Updated", task.updated_at],
+          ] as const
+        ).map(([label, iso]) => (
+          <div key={label}>
+            <dt className="text-xs text-gray-500">{label}</dt>
+            <dd className="text-gray-800">{iso ? <RelativeTime iso={iso} /> : "—"}</dd>
+          </div>
+        ))}
+      </dl>
+
+      <Section title="Request">
+        <p className="whitespace-pre-wrap text-sm text-gray-800">{task.request}</p>
+      </Section>
+
+      {task.result && (
+        <Section title="Result">
+          <Markdown content={task.result} />
+        </Section>
+      )}
+
+      <Section title="Steps">
+        <TaskSteps steps={steps} plan={task.plan} />
+      </Section>
+
+      <Section title="Agent runs & logs">
         <ExecutionLog executions={executions} />
-      </div>
+      </Section>
     </div>
   );
 }

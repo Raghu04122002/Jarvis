@@ -22,7 +22,7 @@ from jarvis.models.project import ProjectNotFoundError
 from jarvis.models.task import ChatRequest, ChatResponse, Task, TaskStatus
 from jarvis.orchestrator.chat_prompt import build_system_prompt
 from jarvis.orchestrator.intent import IntentResult, IntentType, classify
-from jarvis.orchestrator.planner import BasePlanner, Plan
+from jarvis.orchestrator.planner import BasePlanner, Plan, short_title
 from jarvis.orchestrator.resolver import ProjectResolver
 from jarvis.orchestrator.supervisor import Review, Supervisor
 from jarvis.services.agent_execution_service import AgentExecutionService
@@ -400,7 +400,7 @@ class Orchestrator:
             context = await self._project_context(session, project_id)
             ai_plan = await self._supervisor.plan(request, context)
             if ai_plan is not None:
-                plan = Plan(title=title or ai_plan.title, steps=ai_plan.steps)
+                plan = Plan(title=short_title(title or ai_plan.title), steps=ai_plan.steps)
                 metadata["planned_by"] = "supervisor"
                 if ai_plan.agent:
                     metadata["agent_name"] = ai_plan.agent
@@ -409,7 +409,7 @@ class Orchestrator:
         if plan is None:
             plan = self._planner.create_plan(request, context={"project_id": project_id or ""})
             if title:
-                plan = Plan(title=title, steps=plan.steps)
+                plan = Plan(title=short_title(title), steps=plan.steps)
         if intent.issue_number is not None:
             metadata["issue_number"] = str(intent.issue_number)
 
@@ -755,6 +755,14 @@ class Orchestrator:
                     stderr=stderr,
                     duration_ms=elapsed * 1000,
                 )
+
+                # Cancelled from the API while the agent ran: the task is
+                # already CANCELLED, so don't fail it or ask for a review.
+                session.expire_all()  # re-read status written by the cancel request
+                current = await self._task_service.get_task(session, task_id)
+                if current.status == TaskStatus.CANCELLED:
+                    await session.commit()
+                    return
 
                 if exit_code != 0:
                     await self._task_service.transition_task(

@@ -69,6 +69,10 @@ export interface TaskSummary {
   title: string;
   status: TaskStatus;
   priority: TaskPriority;
+  project_id?: string | null;
+  error?: string | null;
+  agent_name?: string | null;
+  conversation_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -274,7 +278,10 @@ export interface ApprovalSummary {
   task_id: string;
   tool_name: string;
   operation: string;
+  risk_level?: RiskLevel;
+  description?: string;
   status: ApprovalStatus;
+  expires_at?: string | null;
   created_at: string;
 }
 
@@ -415,6 +422,17 @@ export interface HealthResponse {
   status: string;
   service: string;
   version: string;
+  timestamp: string;
+}
+
+// ---- Activity ----
+
+/** A persisted event from GET /activity (newest first). */
+export interface ActivityEvent {
+  id: string;
+  type: string;
+  task_id: string | null;
+  data: Record<string, unknown>;
   timestamp: string;
 }
 

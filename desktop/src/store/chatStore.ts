@@ -23,6 +23,8 @@ export interface Conversation {
   title: string;
   /** True once the user renamed it; stops auto-titling. */
   titleEdited?: boolean;
+  /** Project the chat was last scoped to, if any. */
+  projectId?: string | null;
   createdAt: string;
   updatedAt: string;
   messages: ChatMessage[];
@@ -275,6 +277,8 @@ export const useChatStore = create<ChatState>()(
             set((s) => ({ conversations: [conv, ...s.conversations], activeId: conv.id }));
             convId = conv.id;
           }
+          const scope = get().activeProjectId;
+          if (scope) updateConv(convId, (c) => ({ ...c, projectId: scope }));
           const conv = get().conversations.find((c) => c.id === convId)!;
           const userMsg: ChatMessage = {
             id: uid("msg"),

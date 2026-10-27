@@ -5,9 +5,9 @@ All task business logic lives here, not in API route handlers.
 
 import logging
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from jarvis.db.tables import TaskRow, TaskStepRow
@@ -119,7 +119,13 @@ class TaskService:
         session.add(row)
         await session.flush()
         task = _row_to_task(row)
-        self._event_bus.publish(Event(type=EventType.TASK_CREATED, task_id=task_id))
+        self._event_bus.publish(
+            Event(
+                type=EventType.TASK_CREATED,
+                task_id=task_id,
+                data={"title": title, "project_id": project_id or ""},
+            )
+        )
         return task
 
     async def get_task(self, session: AsyncSession, task_id: str) -> Task:
@@ -134,6 +140,8 @@ class TaskService:
         *,
         status: TaskStatus | None = None,
         priority: TaskPriority | None = None,
+        project_id: str | None = None,
+        query: str | None = None,
         limit: int = 50,
     ) -> list[TaskSummary]:
         stmt = select(TaskRow)
@@ -141,6 +149,11 @@ class TaskService:
             stmt = stmt.where(TaskRow.status == status.value)
         if priority is not None:
             stmt = stmt.where(TaskRow.priority == priority.value)
+        if project_id is not None:
+            stmt = stmt.where(TaskRow.project_id == project_id)
+        if query:
+            like = f"%{query.strip()}%"
+            stmt = stmt.where(or_(TaskRow.title.ilike(like), TaskRow.request.ilike(like)))
         stmt = stmt.order_by(TaskRow.created_at.desc()).limit(limit)
         result = await session.execute(stmt)
         rows = result.scalars().all()
@@ -150,11 +163,46 @@ class TaskService:
                 title=r.title,
                 status=TaskStatus(r.status),
                 priority=TaskPriority(r.priority),
+                project_id=r.project_id,
+                error=r.error,
+                agent_name=(r.metadata_ or {}).get("agent_name"),
+                conversation_id=(r.metadata_ or {}).get("conversation_id"),
                 created_at=r.created_at,
                 updated_at=r.updated_at,
             )
             for r in rows
         ]
+
+    async def fail_stale_tasks(
+        self, session: AsyncSession, *, planning_timeout: timedelta
+    ) -> list[str]:
+        """Fail tasks stuck in PLANNING longer than ``planning_timeout``.
+
+        A task only sits in PLANNING until it is dispatched, so one that is
+        still there after the timeout lost its dispatch (e.g. a restart).
+        Returns the ids of the tasks that were failed.
+        """
+        cutoff = datetime.now(UTC) - planning_timeout
+        stmt = select(TaskRow.id, TaskRow.updated_at).where(
+            TaskRow.status == TaskStatus.PLANNING.value
+        )
+        rows = (await session.execute(stmt)).all()
+        stale = [
+            task_id
+            for task_id, updated in rows
+            # SQLite returns naive datetimes; treat them as UTC.
+            if (updated if updated.tzinfo else updated.replace(tzinfo=UTC)) < cutoff
+        ]
+        minutes = int(planning_timeout.total_seconds() // 60)
+        for task_id in stale:
+            await self.transition_task(
+                session,
+                task_id,
+                TaskStatus.FAILED,
+                error=f"Stale: stuck in planning for over {minutes} min and was never "
+                "dispatched. Retry to run it again.",
+            )
+        return stale
 
     async def transition_task(
         self,

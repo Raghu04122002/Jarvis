@@ -142,5 +142,9 @@ class TaskSummary(BaseModel):
     title: str
     status: TaskStatus
     priority: TaskPriority
+    project_id: str | None = None
+    error: str | None = None
+    agent_name: str | None = None
+    conversation_id: str | None = None
     created_at: datetime
     updated_at: datetime

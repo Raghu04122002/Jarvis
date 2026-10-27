@@ -46,6 +46,9 @@ class AgentsConfig(BaseModel):
     claude_command: str = "claude"
     antigravity_command: str = "antigravity"
     default_timeout: int = 300
+    # Tasks still in PLANNING after this many minutes were never dispatched
+    # (e.g. lost on restart) and are marked failed so they can be retried.
+    stale_planning_minutes: int = 15
     preferred_agent: str = "claude_code"
 
     # Backend for the Claude Code agent. "ollama" runs Claude Code against

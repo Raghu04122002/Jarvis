@@ -58,7 +58,10 @@ class ApprovalSummary(BaseModel):
     task_id: str
     tool_name: str
     operation: str
+    risk_level: RiskLevel = RiskLevel.REQUIRES_APPROVAL
+    description: str = ""
     status: ApprovalStatus
+    expires_at: datetime | None = None
     created_at: datetime
 
 

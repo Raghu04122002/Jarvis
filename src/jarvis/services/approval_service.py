@@ -47,7 +47,10 @@ def _row_to_summary(row: ApprovalRequestRow) -> ApprovalSummary:
         task_id=row.task_id,
         tool_name=row.tool_name,
         operation=row.operation,
+        risk_level=RiskLevel(row.risk_level),
+        description=row.description or "",
         status=ApprovalStatus(row.status),
+        expires_at=row.expires_at,
         created_at=row.created_at,
     )
 

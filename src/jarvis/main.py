@@ -1,8 +1,11 @@
 """Jarvis FastAPI application."""
 
+import asyncio
+import contextlib
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import timedelta
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,11 +15,14 @@ from jarvis import __version__
 from jarvis.api.dependencies import (
     get_ai_service,
     get_database,
+    get_event_bus,
+    get_orchestrator,
     get_pxpipe_service,
     get_scheduler_engine,
     init_dependencies,
     reset_dependencies,
 )
+from jarvis.api.routes.activity import router as activity_router
 from jarvis.api.routes.approvals import router as approvals_router
 from jarvis.api.routes.events import router as events_router
 from jarvis.api.routes.health import router as health_router
@@ -27,9 +33,35 @@ from jarvis.api.routes.tasks import router as tasks_router
 from jarvis.api.routes.voice import router as voice_router
 from jarvis.api.routes.workflows import router as workflows_router
 from jarvis.config import JarvisConfig, load_config
+from jarvis.db.engine import Database
 from jarvis.logging import setup_logging
+from jarvis.services.activity_service import ActivityRecorder
 
 logger = logging.getLogger(__name__)
+
+STALE_SWEEP_INTERVAL = 60  # seconds
+
+
+async def sweep_stale_tasks(db: Database, planning_timeout: timedelta) -> int:
+    """Fail tasks stuck in planning; returns how many were failed."""
+    orchestrator = get_orchestrator()
+    async with db.session() as session:
+        stale = await orchestrator.task_service.fail_stale_tasks(
+            session, planning_timeout=planning_timeout
+        )
+        await session.commit()
+    if stale:
+        logger.warning("Marked %d stale planning task(s) as failed: %s", len(stale), stale)
+    return len(stale)
+
+
+async def _stale_sweeper(db: Database, planning_timeout: timedelta) -> None:
+    while True:
+        try:
+            await sweep_stale_tasks(db, planning_timeout)
+        except Exception:
+            logger.exception("Stale task sweep failed")
+        await asyncio.sleep(STALE_SWEEP_INTERVAL)
 
 
 @asynccontextmanager
@@ -51,7 +83,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     if config.scheduler.enabled:
         get_scheduler_engine().start()
+
+    activity = ActivityRecorder(get_event_bus(), db)
+    activity.start()
+    sweeper = asyncio.create_task(
+        _stale_sweeper(db, timedelta(minutes=config.agents.stale_planning_minutes))
+    )
     yield
+    sweeper.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await sweeper
+    await activity.stop()
     if config.scheduler.enabled:
         await get_scheduler_engine().stop()
     if pxpipe is not None:
@@ -92,6 +134,7 @@ def create_app(config: JarvisConfig | None = None) -> FastAPI:
     app.include_router(projects_router)
     app.include_router(memory_router)
     app.include_router(approvals_router)
+    app.include_router(activity_router)
     app.include_router(schedules_router)
     app.include_router(events_router)
     app.include_router(voice_router)
