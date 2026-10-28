@@ -17,10 +17,10 @@ from typing import Any
 
 import httpx
 
+from jarvis.services.news_search import Page, collect_news, fetch_html
 from jarvis.services.search_grounding import (
     GroundedResult,
     extract_date,
-    fresh_cutoff,
     source_name,
 )
 
@@ -111,6 +111,7 @@ class SearchResult:
     url: str
     snippet: str
     published: str = ""  # backend-supplied publication timestamp, if any
+    content: str = ""  # full page text when the backend returns it (hub mining)
 
 
 class WebSearchBackend:
@@ -120,6 +121,15 @@ class WebSearchBackend:
 
     async def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
         raise NotImplementedError
+
+    async def fetch_page(self, url: str) -> Page | None:
+        """Fetch one page for dating / headline checks. None if unavailable."""
+        return None
+
+
+class _DirectFetchMixin:
+    async def fetch_page(self, url: str) -> Page | None:
+        return await fetch_html(url)
 
 
 class OllamaWebSearch(WebSearchBackend):
@@ -141,13 +151,37 @@ class OllamaWebSearch(WebSearchBackend):
             resp.raise_for_status()
             data = resp.json()
         return [
-            SearchResult(r.get("title", ""), r.get("url", ""), (r.get("content") or "")[:600])
+            SearchResult(
+                r.get("title", ""),
+                r.get("url", ""),
+                (r.get("content") or "")[:600],
+                content=(r.get("content") or "")[:30000],
+            )
             for r in data.get("results", [])
             if r.get("url")
         ]
 
+    async def fetch_page(self, url: str) -> Page | None:
+        """Fetch directly; for sites that block that, use Ollama's hosted web_fetch."""
+        page = await fetch_html(url)
+        if page is not None:
+            return page
+        try:
+            async with httpx.AsyncClient(timeout=_SEARCH_TIMEOUT) as client:
+                resp = await client.post(
+                    f"{self._base_url}/api/web_fetch",
+                    headers={"Authorization": f"Bearer {self._api_key}"},
+                    json={"url": url},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.debug("web_fetch %s failed: %s", url, exc)
+            return None
+        return Page(text=str(data.get("content") or ""), title=str(data.get("title") or ""))
 
-class TavilyWebSearch(WebSearchBackend):
+
+class TavilyWebSearch(_DirectFetchMixin, WebSearchBackend):
     name = "tavily"
 
     def __init__(self, api_key: str) -> None:
@@ -173,7 +207,7 @@ class TavilyWebSearch(WebSearchBackend):
         ]
 
 
-class BraveWebSearch(WebSearchBackend):
+class BraveWebSearch(_DirectFetchMixin, WebSearchBackend):
     name = "brave"
 
     def __init__(self, api_key: str) -> None:
@@ -239,6 +273,8 @@ def parse_search_output(output: str) -> list[GroundedResult]:
         data = json.loads(output)
     except ValueError:
         return []
+    if isinstance(data, dict):
+        data = data.get("results")
     if not isinstance(data, list):
         return []
     return [
@@ -248,43 +284,54 @@ def parse_search_output(output: str) -> list[GroundedResult]:
             snippet=str(r.get("snippet", "")),
             source=str(r.get("source", "")) or source_name(str(r.get("url", ""))),
             date=r.get("date") or None,
+            headline=bool(r.get("headline", False)),
         )
         for r in data
         if isinstance(r, dict) and r.get("url")
     ]
 
 
-def _results_json(results: list[GroundedResult], limit: int = _MAX_TOOL_OUTPUT - 200) -> str:
+def parse_search_note(output: str) -> str:
+    """The collector's note ("Only 3 recent headlines found...") if there is one."""
+    try:
+        data = json.loads(output)
+    except ValueError:
+        return ""
+    return str(data.get("note") or "") if isinstance(data, dict) else ""
+
+
+def _results_json(
+    results: list[GroundedResult], note: str = "", limit: int = _MAX_TOOL_OUTPUT - 200
+) -> str:
     """Serialise results as JSON that always fits in the tool-output limit.
 
     Toolbox truncates long outputs, and truncated JSON can't be parsed by the
     grounding step or the tool view, so shorten snippets (then drop the
-    lowest-ranked results) until the whole list fits.
+    lowest-ranked results) until the whole object fits.
     """
 
     def dump(items: list[GroundedResult], snip: int) -> str:
-        return json.dumps(
-            [
-                {
-                    "title": r.title,
-                    "url": r.url,
-                    "source": r.source,
-                    "date": r.date,
-                    "snippet": r.snippet if len(r.snippet) <= snip else r.snippet[:snip] + "…",
-                }
-                for r in items
-            ],
-            ensure_ascii=False,
-        )
+        rows = [
+            {
+                "title": r.title,
+                "url": r.url,
+                "source": r.source,
+                "date": r.date,
+                "headline": r.headline,
+                "snippet": r.snippet if len(r.snippet) <= snip else r.snippet[:snip] + "…",
+            }
+            for r in items
+        ]
+        return json.dumps({"results": rows, "note": note}, ensure_ascii=False)
 
     items = list(results)
     while items:
-        for snip in (600, 400, 250, 150):
+        for snip in (600, 400, 250, 150, 0):
             out = dump(items, snip)
             if len(out) <= limit:
                 return out
         items.pop()
-    return "[]"
+    return dump([], 0)
 
 
 def web_search_tool(
@@ -295,9 +342,10 @@ def web_search_tool(
 ) -> Tool:
     """The ``web_search`` tool.
 
-    With ``fresh_only`` (news / "today" questions) results not dated within the
-    last 48 hours - or with no findable date - are dropped before the model
-    sees them.
+    With ``fresh_only`` (news / "today" questions) the search goes through the
+    news collector: hub pages are expanded into their articles, each article is
+    dated from its page, anything older than 48 hours is dropped (undated
+    articles are kept and marked), and captions / page titles are filtered out.
     """
 
     async def handler(args: dict[str, Any]) -> str:
@@ -306,19 +354,17 @@ def web_search_tool(
             return "No query given."
         n = int(args.get("max_results") or 5)
         day = today or date.today()
+        if fresh_only:
+            report = await collect_news(backend, query, day, limit=max(5, min(n, 10)))
+            if not report.items:
+                return (
+                    f"No recent article headlines found for {query!r}. {report.note} "
+                    "Tell the user you couldn't find current coverage; do not use older news."
+                )
+            return _results_json(report.items, report.note)
         results = ground_results(await backend.search(query, max(1, min(n, 10))), day)
         if not results:
             return f"No results for {query!r}."
-        if fresh_only:
-            cutoff = fresh_cutoff(day)
-            fresh = [r for r in results if r.date and r.date >= cutoff.isoformat()]
-            if not fresh:
-                return (
-                    f"No results for {query!r} are dated within the last 48 hours "
-                    f"({len(results)} older or undated results were dropped). "
-                    "Tell the user you couldn't find current coverage; do not use older news."
-                )
-            results = fresh
         return _results_json(results)
 
     return Tool(

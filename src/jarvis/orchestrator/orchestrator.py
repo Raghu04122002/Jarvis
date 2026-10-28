@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import re
 from collections.abc import AsyncIterator
@@ -32,6 +31,7 @@ from jarvis.services.chat_tools import (
     Toolbox,
     ToolHandler,
     WebSearchBackend,
+    parse_search_note,
     parse_search_output,
     web_search_tool,
 )
@@ -975,11 +975,7 @@ _CITE_RE = re.compile(r"\s?【(\d+)(?:†([^】]*))?】")
 
 
 def _search_urls(output: str) -> list[str]:
-    try:
-        data = json.loads(output)
-    except ValueError:
-        return []
-    return [str(r.get("url", "")) for r in data if isinstance(r, dict)]
+    return [r.url for r in parse_search_output(output)]
 
 
 _ITEM_RE = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+|^\s*\|")
@@ -1024,13 +1020,29 @@ def _ground(
     if not results or not answer:
         return answer
     answer = _link_source_markers(answer, results)
-    report = ground_answer(answer, results, question)
+    report = ground_answer(answer, results, question, label_dates=time_sensitive)
     text = report.answer
     kept = sum(1 for ln in text.splitlines() if _ITEM_RE.match(ln))
     dropped = sum(1 for ln in report.removed if _ITEM_RE.match(ln))
-    if time_sensitive and dropped and kept < dropped:
-        # Most of the model's summary wasn't in the sources. Show the headlines
-        # exactly as published instead of a mostly-empty answer.
+    note = parse_search_note(searched[-1]["output"]) if time_sensitive else ""
+    headlines = [r for r in results if r.headline]
+    want = min(5, len(headlines))
+    if time_sensitive and headlines and kept < want:
+        # The model's summary mostly failed grounding, or it listed fewer stories
+        # than were found. Show the vetted headlines exactly as published.
+        fallback = verbatim_headlines(headlines, limit=10)
+        if fallback:
+            lead = (
+                "Jarvis's summary didn't match its sources closely enough, so here are "
+                "the headlines as the outlets published them:"
+                if dropped
+                else "Top headlines, as the outlets published them:"
+            )
+            parts = [lead, fallback, coverage_line(headlines)]
+            if note:
+                parts.append(f"*{note}*")
+            return "\n\n".join(p for p in parts if p)
+    if time_sensitive and not headlines and dropped and kept < dropped:
         fallback = verbatim_headlines(results)
         if fallback:
             return (
@@ -1049,4 +1061,6 @@ def _ground(
         line = coverage_line(cited)
         if line:
             text += f"\n\n{line}"
+        if note:
+            text += f"\n\n*{note}*"
     return text

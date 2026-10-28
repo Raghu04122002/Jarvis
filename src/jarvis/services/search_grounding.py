@@ -166,7 +166,10 @@ def source_name(url: str, title: str = "") -> str:
                 return tail
     parts = host.split(".")
     base = parts[-2] if len(parts) >= 2 else host
-    return base.capitalize() if base else "Source"
+    if not base:
+        return "Source"
+    # Call-sign / acronym hosts (wcvb, kxan, bbc) read as initials.
+    return base.upper() if len(base) <= 4 else base.capitalize()
 
 
 # --------------------------------------------------------------------- grounding
@@ -179,6 +182,7 @@ class GroundedResult:
     snippet: str
     source: str
     date: str | None  # ISO date, or None if undated
+    headline: bool = False  # title is a vetted article headline (news search)
 
 
 _STOPWORDS = frozenset(
@@ -272,6 +276,7 @@ def ground_answer(
     question: str = "",
     *,
     threshold: float = 0.9,
+    label_dates: bool = False,
 ) -> GroundingReport:
     """Drop lines the search results don't support and attribute the rest.
 
@@ -331,7 +336,7 @@ def ground_answer(
             if not ok(evidence):
                 removed.append(stripped)
                 continue
-            out.append(_attribute(line, cited) if is_item else line)
+            out.append(_attribute(line, cited, label_dates) if is_item else line)
             continue
 
         if is_item:
@@ -344,7 +349,7 @@ def ground_answer(
             if best is not None and ok(f"{best.title}\n{best.snippet}"):
                 # Table header rows have no content words; leave them alone.
                 if _tokens(claim) - {_stem(w) for w in _FRAMING} - ignore - names:
-                    out.append(_attribute(line, [best]))
+                    out.append(_attribute(line, [best], label_dates))
                 else:
                     out.append(line)
                 continue
@@ -379,9 +384,15 @@ def _renumber(lines: list[str]) -> list[str]:
     return out
 
 
-def _attribute(line: str, cited: list[GroundedResult]) -> str:
+def _cite(r: GroundedResult, label_dates: bool = False) -> str:
+    """ "[Source](url)", plus " · date unknown" for undated news sources."""
+    unknown = " · date unknown" if label_dates and not r.date else ""
+    return f"[{r.source}]({r.url}){unknown}"
+
+
+def _attribute(line: str, cited: list[GroundedResult], label_dates: bool = False) -> str:
     """Rewrite a list/table line so it ends with "— [Source](url)" for each source."""
-    attribution = ", ".join(f"[{r.source}]({r.url})" for r in cited)
+    attribution = ", ".join(_cite(r, label_dates) for r in cited)
     if line.strip().startswith("|"):
         # Tables: replace link text in place with the source name.
         def fix(m: re.Match[str]) -> str:
@@ -418,15 +429,17 @@ def _attribute(line: str, cited: list[GroundedResult]) -> str:
 def coverage_line(results: list[GroundedResult]) -> str:
     """One line saying which days the answer's sources cover."""
     days = sorted({date.fromisoformat(r.date) for r in results if r.date})
+    unknown = sum(1 for r in results if not r.date)
+    tail = f" · {unknown} with date unknown" if unknown else ""
     if not days:
-        return ""
+        return f"*All {unknown} sources have no findable date.*" if unknown else ""
     fmt = "%a %-d %b %Y"
     span = (
         days[0].strftime(fmt)
         if days[0] == days[-1]
         else f"{days[0].strftime('%a %-d %b')} – {days[-1].strftime(fmt)}"
     )
-    return f"*Covers {span} · sources published in the last 48 hours.*"
+    return f"*Covers {span} · sources published in the last 48 hours{tail}.*"
 
 
 # --- verbatim fallback ---------------------------------------------------------------
@@ -532,6 +545,7 @@ def verbatim_headlines(results: list[GroundedResult], limit: int = 8) -> str:
     lines: list[str] = []
     per_source = max(1, limit // max(1, len(results)))
     for r in results:
-        for h in _headlines_in(r)[: per_source + 1]:
-            lines.append(f"- {h} — [{r.source}]({r.url})")
+        heads = [r.title] if r.headline else _headlines_in(r)[: per_source + 1]
+        for h in heads:
+            lines.append(f"- {h} — {_cite(r, label_dates=True)}")
     return "\n".join(lines[:limit])

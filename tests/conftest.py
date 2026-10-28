@@ -46,3 +46,11 @@ async def client(app):  # type: ignore[no-untyped-def]
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
     reset_dependencies()
+
+
+@pytest.fixture(autouse=True)
+def _clear_news_cache() -> None:
+    """News reports are cached per (query, day); keep tests independent."""
+    from jarvis.services import news_search
+
+    news_search._cache.clear()

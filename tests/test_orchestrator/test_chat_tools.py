@@ -68,8 +68,8 @@ class FakeSearch(WebSearchBackend):
     async def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
         return [
             SearchResult(
-                "Real headline",
-                "https://example.com/a",
+                "Big story about the real headline",
+                "https://example.com/2026/10/27/big-story-real-headline",
                 "Big story about the real headline.",
                 datetime.now(UTC).isoformat(),
             )
@@ -222,14 +222,15 @@ async def test_action_hint_and_history_passed(session: AsyncSession) -> None:
 @pytest.mark.asyncio
 async def test_web_search_tool_offered_when_backend_set(session: AsyncSession) -> None:
     ai = FakeStreamAI(
-        ("call", "web_search", {"query": "news"}), "See [Real headline](https://example.com/a)"
+        ("call", "web_search", {"query": "news"}),
+        "See [Real headline](https://example.com/2026/10/27/big-story-real-headline)",
     )
     orch, _ = _orch(ai, FakeSearch())
     resp = await orch.handle_chat(session, ChatRequest(message="today's top news"))
     assert "- web_search:" in ai.systems[0]
     call = resp.tool_calls[0]
     assert call["name"] == "web_search" and call["status"] == "done"
-    assert "https://example.com/a" in call["output"]
+    assert "https://example.com/2026/10/27/big-story-real-headline" in call["output"]
 
 
 @pytest.mark.asyncio
@@ -341,12 +342,14 @@ async def test_chat_stream_endpoint() -> None:
 async def test_invented_links_are_removed_after_search(session: AsyncSession) -> None:
     ai = FakeStreamAI(
         ("call", "web_search", {"query": "news"}),
-        "- [Real](https://example.com/a)\n- [Fake](https://made.up/x)",
+        "- [Real](https://example.com/2026/10/27/big-story-real-headline)\n- [Fake](https://made.up/x)",
     )
     orch, _ = _orch(ai, FakeSearch())
     resp = await orch.handle_chat(session, ChatRequest(message="today's top news"))
     answer = resp.answer or ""
-    assert answer.startswith("- Real — [Example](https://example.com/a)")
+    assert answer.startswith(
+        "- Real — [Example](https://example.com/2026/10/27/big-story-real-headline)"
+    )
     assert "made.up" not in answer and "Fake" not in answer
     assert "1 line removed" in answer
 
@@ -360,7 +363,9 @@ async def test_gpt_oss_citation_markers_become_links(session: AsyncSession) -> N
     orch, _ = _orch(ai, FakeSearch())
     resp = await orch.handle_chat(session, ChatRequest(message="today's top news"))
     answer = resp.answer or ""
-    assert answer.startswith("1. Big story — [Example](https://example.com/a)\n")
+    assert answer.startswith(
+        "1. Big story — [Example](https://example.com/2026/10/27/big-story-real-headline)\n"
+    )
     assert "Nowhere" not in answer  # marker for a result that doesn't exist is dropped
     assert "*Covers " in answer
 
@@ -373,33 +378,50 @@ class DatedSearch(WebSearchBackend):
         self.items = items
 
     async def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
+        # A realistic headline from the URL slug ("Parliament passes new budget bill").
         return [
-            SearchResult(f"Story {i}", url, "text", pub) for i, (url, pub) in enumerate(self.items)
+            SearchResult(
+                url.rstrip("/").rsplit("/", 1)[-1].replace("-", " ").capitalize(), url, "text", pub
+            )
+            for url, pub in self.items
         ]
 
 
 @pytest.mark.asyncio
-async def test_fresh_only_drops_old_and_undated_results() -> None:
+async def test_fresh_only_drops_old_but_keeps_undated_results() -> None:
     from datetime import date
 
     from jarvis.services.chat_tools import web_search_tool
 
     backend = DatedSearch(
-        ("https://a.com/x", "2026-10-27T08:00:00Z"),  # today
-        ("https://b.com/y", "2026-10-26"),  # yesterday, < 48h
-        ("https://c.com/z", "2026-10-20"),  # a week old
-        ("https://d.com/w", ""),  # no date anywhere
+        ("https://a.com/2026/10/27/parliament-passes-new-budget-bill", "2026-10-27T08:00:00Z"),
+        ("https://b.com/world/storm-hits-the-northern-coast", "2026-10-26"),  # < 48h
+        ("https://c.com/news/old-story-from-last-week", "2026-10-20"),  # a week old
+        ("https://d.com/news/council-approves-city-transit-plan", ""),  # no date anywhere
+        ("https://e.com/", "2026-10-27"),  # a homepage, not an article
     )
     tool = web_search_tool(backend, fresh_only=True, today=date(2026, 10, 27))
     data = json.loads(await tool.handler({"query": "news"}))
-    assert [r["url"] for r in data] == ["https://a.com/x", "https://b.com/y"]
-    assert data[0]["date"] == "2026-10-27" and data[0]["source"]
+    urls = [r["url"] for r in data["results"]]
+    assert "https://c.com/news/old-story-from-last-week" not in urls
+    assert "https://e.com/" not in urls
+    assert set(urls) == {
+        "https://a.com/2026/10/27/parliament-passes-new-budget-bill",
+        "https://b.com/world/storm-hits-the-northern-coast",
+        "https://d.com/news/council-approves-city-transit-plan",
+    }
+    undated = [r for r in data["results"] if r["url"].startswith("https://d.com")]
+    assert undated[0]["date"] is None
+    # Fewer than 5 survived, so the note says how many and why.
+    assert "Only 3" in data["note"] and "older than 48 hours" in data["note"]
 
     stale = web_search_tool(
-        DatedSearch(("https://c.com/z", "2026-10-20")), fresh_only=True, today=date(2026, 10, 27)
+        DatedSearch(("https://c.com/news/old-story-from-last-week", "2026-10-20")),
+        fresh_only=True,
+        today=date(2026, 10, 27),
     )
     out = await stale.handler({"query": "news"})
-    assert "No results" in out and "48 hours" in out
+    assert "No recent article headlines" in out
 
 
 @pytest.mark.asyncio
@@ -410,7 +432,8 @@ async def test_not_time_sensitive_keeps_undated_results() -> None:
 
     tool = web_search_tool(DatedSearch(("https://d.com/w", "")), today=date(2026, 10, 27))
     data = json.loads(await tool.handler({"query": "python 3.13 release notes"}))
-    assert data[0]["url"] == "https://d.com/w" and data[0]["date"] is None
+    assert data["results"][0]["url"] == "https://d.com/w"
+    assert data["results"][0]["date"] is None
 
 
 def test_search_output_always_valid_json() -> None:
@@ -424,21 +447,21 @@ def test_search_output_always_valid_json() -> None:
     out = _results_json(big)
     assert len(out) < _MAX_TOOL_OUTPUT
     data = json.loads(out)
-    assert len(data) >= 5 and data[0]["url"] == "https://x.com/0"
+    assert len(data["results"]) >= 5 and data["results"][0]["url"] == "https://x.com/0"
 
 
 @pytest.mark.asyncio
 async def test_half_bracket_links_are_grounded(session: AsyncSession) -> None:
     ai = FakeStreamAI(
         ("call", "web_search", {"query": "news"}),
-        "- Big story about the real headline【Example](https://example.com/a)\n"
+        "- Big story about the real headline【Example](https://example.com/2026/10/27/big-story-real-headline)\n"
         "These are the most prominent stories across selected outlets.",
     )
     orch, _ = _orch(ai, FakeSearch())
     resp = await orch.handle_chat(session, ChatRequest(message="today's top news"))
     answer = resp.answer or ""
     assert answer.startswith(
-        "- Big story about the real headline — [Example](https://example.com/a)"
+        "- Big story about the real headline — [Example](https://example.com/2026/10/27/big-story-real-headline)"
     )
     assert "prominent" not in answer and "【" not in answer
 
@@ -455,6 +478,9 @@ async def test_mostly_unsupported_news_falls_back_to_verbatim_headlines(
     resp = await orch.handle_chat(session, ChatRequest(message="today's top news"))
     answer = resp.answer or ""
     assert answer.startswith("Jarvis's summary didn't match its sources")
-    assert "- Big story about the real headline. — [Example](https://example.com/a)" in answer
+    assert (
+        "- Big story about the real headline — [Example](https://example.com/2026/10/27/big-story-real-headline)"
+        in answer
+    )
     assert "Aliens" not in answer and "war is over" not in answer
     assert "*Covers " in answer
