@@ -72,9 +72,7 @@ class SchedulerEngine:
                 try:
                     await self._trigger(session, scheduled)
                 except Exception:
-                    logger.exception(
-                        "Failed to trigger scheduled task %s", scheduled.id
-                    )
+                    logger.exception("Failed to trigger scheduled task %s", scheduled.id)
                     await self._scheduler_service.record_run(
                         session, scheduled.id, "", success=False
                     )
@@ -106,15 +104,11 @@ class SchedulerEngine:
             success = True
             task_id = response.task_id or ""
         except Exception:
-            logger.exception(
-                "Orchestrator failed for scheduled task %s", scheduled.id
-            )
+            logger.exception("Orchestrator failed for scheduled task %s", scheduled.id)
             success = False
             task_id = ""
 
-        await self._scheduler_service.record_run(
-            session, scheduled.id, task_id, success=success
-        )
+        await self._scheduler_service.record_run(session, scheduled.id, task_id, success=success)
 
         self._event_bus.publish(
             Event(

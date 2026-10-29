@@ -78,20 +78,14 @@ class ComputerTool(BaseTool):
         if self._is_blocked(app_name):
             return False
         if self._config.allowed_applications:
-            return any(
-                a.lower() == app_name.lower()
-                for a in self._config.allowed_applications
-            )
+            return any(a.lower() == app_name.lower() for a in self._config.allowed_applications)
         return True
 
     def _check_bounds(self, x: int, y: int) -> str | None:
         """Return error message if coordinates are out of screen bounds."""
         screen_w, screen_h = pyautogui.size()
         if x < 0 or x >= screen_w or y < 0 or y >= screen_h:
-            return (
-                f"Coordinates ({x}, {y}) out of screen bounds "
-                f"({screen_w}x{screen_h})"
-            )
+            return f"Coordinates ({x}, {y}) out of screen bounds ({screen_w}x{screen_h})"
         return None
 
     async def _screenshot(self, **kwargs: str | int | list[str]) -> ToolResult:
@@ -123,7 +117,9 @@ class ComputerTool(BaseTool):
             return ToolResult(success=True, output=json.dumps(info))
         except Exception as exc:
             return ToolResult(
-                success=False, output="", error=f"Failed to get screen info: {exc}",
+                success=False,
+                output="",
+                error=f"Failed to get screen info: {exc}",
                 exit_code=1,
             )
 
@@ -135,12 +131,16 @@ class ComputerTool(BaseTool):
             )
             result = subprocess.run(
                 ["osascript", "-e", script],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
             if result.returncode != 0:
                 return ToolResult(
-                    success=False, output="",
-                    error=f"osascript failed: {result.stderr.strip()}", exit_code=1,
+                    success=False,
+                    output="",
+                    error=f"osascript failed: {result.stderr.strip()}",
+                    exit_code=1,
                 )
             windows = [w.strip() for w in result.stdout.strip().split(", ") if w.strip()]
             return ToolResult(success=True, output=json.dumps(windows))
@@ -150,57 +150,66 @@ class ComputerTool(BaseTool):
             )
         except Exception as exc:
             return ToolResult(
-                success=False, output="", error=f"Failed to list windows: {exc}",
+                success=False,
+                output="",
+                error=f"Failed to list windows: {exc}",
                 exit_code=1,
             )
 
     async def _open_application(self, **kwargs: str | int | list[str]) -> ToolResult:
         app_name = kwargs.get("name")
         if not isinstance(app_name, str) or not app_name:
-            return ToolResult(
-                success=False, output="", error="name is required", exit_code=1
-            )
+            return ToolResult(success=False, output="", error="name is required", exit_code=1)
 
         if not self._is_allowed(app_name):
             return ToolResult(
-                success=False, output="",
-                error=f"Application '{app_name}' is blocked", exit_code=1,
+                success=False,
+                output="",
+                error=f"Application '{app_name}' is blocked",
+                exit_code=1,
             )
 
         try:
             result = subprocess.run(
                 ["open", "-a", app_name],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
             if result.returncode != 0:
                 return ToolResult(
-                    success=False, output="",
+                    success=False,
+                    output="",
                     error=f"Failed to open '{app_name}': {result.stderr.strip()}",
                     exit_code=1,
                 )
             return ToolResult(success=True, output=f"Opened application '{app_name}'")
         except subprocess.TimeoutExpired:
             return ToolResult(
-                success=False, output="",
-                error=f"Timed out opening '{app_name}'", exit_code=1,
+                success=False,
+                output="",
+                error=f"Timed out opening '{app_name}'",
+                exit_code=1,
             )
         except Exception as exc:
             return ToolResult(
-                success=False, output="", error=f"Failed to open application: {exc}",
+                success=False,
+                output="",
+                error=f"Failed to open application: {exc}",
                 exit_code=1,
             )
 
     async def _focus_window(self, **kwargs: str | int | list[str]) -> ToolResult:
         app_name = kwargs.get("name")
         if not isinstance(app_name, str) or not app_name:
-            return ToolResult(
-                success=False, output="", error="name is required", exit_code=1
-            )
+            return ToolResult(success=False, output="", error="name is required", exit_code=1)
 
         if not self._is_allowed(app_name):
             return ToolResult(
-                success=False, output="",
-                error=f"Application '{app_name}' is blocked", exit_code=1,
+                success=False,
+                output="",
+                error=f"Application '{app_name}' is blocked",
+                exit_code=1,
             )
 
         try:
@@ -208,23 +217,30 @@ class ComputerTool(BaseTool):
             script = f'tell application "{safe_name}" to activate'
             result = subprocess.run(
                 ["osascript", "-e", script],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
             if result.returncode != 0:
                 return ToolResult(
-                    success=False, output="",
+                    success=False,
+                    output="",
                     error=f"Failed to focus '{app_name}': {result.stderr.strip()}",
                     exit_code=1,
                 )
             return ToolResult(success=True, output=f"Focused application '{app_name}'")
         except subprocess.TimeoutExpired:
             return ToolResult(
-                success=False, output="",
-                error=f"Timed out focusing '{app_name}'", exit_code=1,
+                success=False,
+                output="",
+                error=f"Timed out focusing '{app_name}'",
+                exit_code=1,
             )
         except Exception as exc:
             return ToolResult(
-                success=False, output="", error=f"Failed to focus window: {exc}",
+                success=False,
+                output="",
+                error=f"Failed to focus window: {exc}",
                 exit_code=1,
             )
 
@@ -232,23 +248,21 @@ class ComputerTool(BaseTool):
         x = kwargs.get("x")
         y = kwargs.get("y")
         if x is None or y is None:
-            return ToolResult(
-                success=False, output="", error="x and y are required", exit_code=1
-            )
+            return ToolResult(success=False, output="", error="x and y are required", exit_code=1)
 
         try:
             x_int, y_int = int(str(x)), int(str(y))
         except ValueError:
             return ToolResult(
-                success=False, output="",
-                error="x and y must be integers", exit_code=1,
+                success=False,
+                output="",
+                error="x and y must be integers",
+                exit_code=1,
             )
 
         bounds_error = self._check_bounds(x_int, y_int)
         if bounds_error:
-            return ToolResult(
-                success=False, output="", error=bounds_error, exit_code=1
-            )
+            return ToolResult(success=False, output="", error=bounds_error, exit_code=1)
 
         try:
             button = str(kwargs.get("button", "left"))
@@ -257,37 +271,31 @@ class ComputerTool(BaseTool):
                 success=True, output=f"Clicked at ({x_int}, {y_int}) with {button} button"
             )
         except Exception as exc:
-            return ToolResult(
-                success=False, output="", error=f"Click failed: {exc}", exit_code=1
-            )
+            return ToolResult(success=False, output="", error=f"Click failed: {exc}", exit_code=1)
 
     async def _mouse_move(self, **kwargs: str | int | list[str]) -> ToolResult:
         x = kwargs.get("x")
         y = kwargs.get("y")
         if x is None or y is None:
-            return ToolResult(
-                success=False, output="", error="x and y are required", exit_code=1
-            )
+            return ToolResult(success=False, output="", error="x and y are required", exit_code=1)
 
         try:
             x_int, y_int = int(str(x)), int(str(y))
         except ValueError:
             return ToolResult(
-                success=False, output="",
-                error="x and y must be integers", exit_code=1,
+                success=False,
+                output="",
+                error="x and y must be integers",
+                exit_code=1,
             )
 
         bounds_error = self._check_bounds(x_int, y_int)
         if bounds_error:
-            return ToolResult(
-                success=False, output="", error=bounds_error, exit_code=1
-            )
+            return ToolResult(success=False, output="", error=bounds_error, exit_code=1)
 
         try:
             pyautogui.moveTo(x_int, y_int)
-            return ToolResult(
-                success=True, output=f"Moved mouse to ({x_int}, {y_int})"
-            )
+            return ToolResult(success=True, output=f"Moved mouse to ({x_int}, {y_int})")
         except Exception as exc:
             return ToolResult(
                 success=False, output="", error=f"Mouse move failed: {exc}", exit_code=1
@@ -296,33 +304,23 @@ class ComputerTool(BaseTool):
     async def _type_text(self, **kwargs: str | int | list[str]) -> ToolResult:
         text = kwargs.get("text")
         if not isinstance(text, str) or not text:
-            return ToolResult(
-                success=False, output="", error="text is required", exit_code=1
-            )
+            return ToolResult(success=False, output="", error="text is required", exit_code=1)
 
         try:
             pyautogui.write(text, interval=0.02)
-            return ToolResult(
-                success=True, output=f"Typed {len(text)} characters"
-            )
+            return ToolResult(success=True, output=f"Typed {len(text)} characters")
         except Exception as exc:
-            return ToolResult(
-                success=False, output="", error=f"Type failed: {exc}", exit_code=1
-            )
+            return ToolResult(success=False, output="", error=f"Type failed: {exc}", exit_code=1)
 
     async def _key_press(self, **kwargs: str | int | list[str]) -> ToolResult:
         keys = kwargs.get("keys")
         if not isinstance(keys, str) or not keys:
-            return ToolResult(
-                success=False, output="", error="keys is required", exit_code=1
-            )
+            return ToolResult(success=False, output="", error="keys is required", exit_code=1)
 
         try:
             key_list = [k.strip() for k in keys.split("+")]
             pyautogui.hotkey(*key_list)
-            return ToolResult(
-                success=True, output=f"Pressed key combo: {keys}"
-            )
+            return ToolResult(success=True, output=f"Pressed key combo: {keys}")
         except Exception as exc:
             return ToolResult(
                 success=False, output="", error=f"Key press failed: {exc}", exit_code=1
@@ -331,16 +329,16 @@ class ComputerTool(BaseTool):
     async def _scroll(self, **kwargs: str | int | list[str]) -> ToolResult:
         clicks = kwargs.get("clicks")
         if clicks is None:
-            return ToolResult(
-                success=False, output="", error="clicks is required", exit_code=1
-            )
+            return ToolResult(success=False, output="", error="clicks is required", exit_code=1)
 
         try:
             clicks_int = int(str(clicks))
         except ValueError:
             return ToolResult(
-                success=False, output="",
-                error="clicks must be an integer", exit_code=1,
+                success=False,
+                output="",
+                error="clicks must be an integer",
+                exit_code=1,
             )
 
         try:
@@ -350,6 +348,4 @@ class ComputerTool(BaseTool):
                 success=True, output=f"Scrolled {direction} by {abs(clicks_int)} clicks"
             )
         except Exception as exc:
-            return ToolResult(
-                success=False, output="", error=f"Scroll failed: {exc}", exit_code=1
-            )
+            return ToolResult(success=False, output="", error=f"Scroll failed: {exc}", exit_code=1)

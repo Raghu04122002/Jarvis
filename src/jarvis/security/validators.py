@@ -5,12 +5,12 @@ from pathlib import Path
 
 # Patterns that indicate shell injection attempts
 _SHELL_INJECTION_PATTERNS = [
-    re.compile(r";\s*\w"),        # semicolon followed by command
-    re.compile(r"\|\s*\w"),       # pipe followed by command
-    re.compile(r"&&\s*\w"),       # && followed by command
-    re.compile(r"\|\|\s*\w"),     # || followed by command
-    re.compile(r"`[^`]+`"),       # backtick command substitution
-    re.compile(r"\$\([^)]+\)"),   # $() command substitution
+    re.compile(r";\s*\w"),  # semicolon followed by command
+    re.compile(r"\|\s*\w"),  # pipe followed by command
+    re.compile(r"&&\s*\w"),  # && followed by command
+    re.compile(r"\|\|\s*\w"),  # || followed by command
+    re.compile(r"`[^`]+`"),  # backtick command substitution
+    re.compile(r"\$\([^)]+\)"),  # $() command substitution
 ]
 
 
@@ -33,9 +33,7 @@ class ShellInjectionError(Exception):
         super().__init__(f"Shell injection pattern detected in argument: {value!r}")
 
 
-def validate_working_dir(
-    working_dir: str, allowed_roots: list[str] | None = None
-) -> str:
+def validate_working_dir(working_dir: str, allowed_roots: list[str] | None = None) -> str:
     """Validate and resolve a working directory path.
 
     Returns the canonical (resolved) path. Raises PathTraversalError

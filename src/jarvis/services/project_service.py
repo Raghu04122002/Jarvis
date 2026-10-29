@@ -91,9 +91,7 @@ class ProjectService:
         session.add(row)
         await session.flush()
         project = _row_to_project(row)
-        self._event_bus.publish(
-            Event(type=EventType.PROJECT_CREATED, task_id=project_id)
-        )
+        self._event_bus.publish(Event(type=EventType.PROJECT_CREATED, task_id=project_id))
         return project
 
     async def get_project(self, session: AsyncSession, project_id: str) -> Project:
@@ -142,8 +140,14 @@ class ProjectService:
             raise ProjectNotFoundError(project_id)
 
         updatable = {
-            "name", "local_path", "github_repo", "default_branch",
-            "stack", "preferred_agent", "deployment", "instructions",
+            "name",
+            "local_path",
+            "github_repo",
+            "default_branch",
+            "stack",
+            "preferred_agent",
+            "deployment",
+            "instructions",
         }
         for key, value in fields.items():
             if key in updatable and value is not None:
@@ -153,9 +157,7 @@ class ProjectService:
         row.version += 1
         await session.flush()
 
-        self._event_bus.publish(
-            Event(type=EventType.PROJECT_UPDATED, task_id=project_id)
-        )
+        self._event_bus.publish(Event(type=EventType.PROJECT_UPDATED, task_id=project_id))
         return _row_to_project(row)
 
     async def remove_project(self, session: AsyncSession, project_id: str) -> None:
@@ -164,6 +166,4 @@ class ProjectService:
             raise ProjectNotFoundError(project_id)
         await session.delete(row)
         await session.flush()
-        self._event_bus.publish(
-            Event(type=EventType.PROJECT_DELETED, task_id=project_id)
-        )
+        self._event_bus.publish(Event(type=EventType.PROJECT_DELETED, task_id=project_id))

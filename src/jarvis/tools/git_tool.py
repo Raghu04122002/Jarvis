@@ -93,14 +93,10 @@ class GitTool(BaseTool):
             exit_code=exit_code,
         )
 
-    async def _status(
-        self, working_dir: str, **kwargs: str | int | list[str]
-    ) -> ToolResult:
+    async def _status(self, working_dir: str, **kwargs: str | int | list[str]) -> ToolResult:
         return await self._run_git(working_dir, "status", "--porcelain")
 
-    async def _diff(
-        self, working_dir: str, **kwargs: str | int | list[str]
-    ) -> ToolResult:
+    async def _diff(self, working_dir: str, **kwargs: str | int | list[str]) -> ToolResult:
         args = ["diff"]
         if kwargs.get("cached"):
             args.append("--cached")
@@ -110,35 +106,23 @@ class GitTool(BaseTool):
             args.append(path)
         return await self._run_git(working_dir, *args)
 
-    async def _log(
-        self, working_dir: str, **kwargs: str | int | list[str]
-    ) -> ToolResult:
+    async def _log(self, working_dir: str, **kwargs: str | int | list[str]) -> ToolResult:
         raw_limit = kwargs.get("limit", 10)
         limit = raw_limit if isinstance(raw_limit, int) else int(str(raw_limit))
-        return await self._run_git(
-            working_dir, "log", "--oneline", f"-n{limit}"
-        )
+        return await self._run_git(working_dir, "log", "--oneline", f"-n{limit}")
 
-    async def _branch_list(
-        self, working_dir: str, **kwargs: str | int | list[str]
-    ) -> ToolResult:
+    async def _branch_list(self, working_dir: str, **kwargs: str | int | list[str]) -> ToolResult:
         return await self._run_git(working_dir, "branch", "--list")
 
     async def _current_branch(
         self, working_dir: str, **kwargs: str | int | list[str]
     ) -> ToolResult:
-        return await self._run_git(
-            working_dir, "rev-parse", "--abbrev-ref", "HEAD"
-        )
+        return await self._run_git(working_dir, "rev-parse", "--abbrev-ref", "HEAD")
 
-    async def _checkout(
-        self, working_dir: str, **kwargs: str | int | list[str]
-    ) -> ToolResult:
+    async def _checkout(self, working_dir: str, **kwargs: str | int | list[str]) -> ToolResult:
         branch = kwargs.get("branch")
         if not isinstance(branch, str) or not branch:
-            return ToolResult(
-                success=False, output="", error="branch is required", exit_code=1
-            )
+            return ToolResult(success=False, output="", error="branch is required", exit_code=1)
         return await self._run_git(working_dir, "checkout", branch)
 
     async def _create_branch(
@@ -146,14 +130,10 @@ class GitTool(BaseTool):
     ) -> ToolResult:
         branch = kwargs.get("branch")
         if not isinstance(branch, str) or not branch:
-            return ToolResult(
-                success=False, output="", error="branch is required", exit_code=1
-            )
+            return ToolResult(success=False, output="", error="branch is required", exit_code=1)
         return await self._run_git(working_dir, "checkout", "-b", branch)
 
-    async def _commit(
-        self, working_dir: str, **kwargs: str | int | list[str]
-    ) -> ToolResult:
+    async def _commit(self, working_dir: str, **kwargs: str | int | list[str]) -> ToolResult:
         message = kwargs.get("message")
         if not isinstance(message, str) or not message:
             return ToolResult(
@@ -179,9 +159,7 @@ class GitTool(BaseTool):
 
         return await self._run_git(working_dir, "commit", "-m", message)
 
-    async def _push(
-        self, working_dir: str, **kwargs: str | int | list[str]
-    ) -> ToolResult:
+    async def _push(self, working_dir: str, **kwargs: str | int | list[str]) -> ToolResult:
         args = ["push"]
         if kwargs.get("set_upstream"):
             branch = kwargs.get("branch")

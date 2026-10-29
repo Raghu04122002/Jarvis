@@ -12,21 +12,23 @@ from jarvis.agents.base import AgentError, BaseAgent
 logger = logging.getLogger(__name__)
 
 # Environment variables allowed to pass through to the subprocess.
-_ALLOWED_ENV_KEYS: frozenset[str] = frozenset({
-    "HOME",
-    "PATH",
-    "LANG",
-    "LC_ALL",
-    "LC_CTYPE",
-    "TERM",
-    "USER",
-    "SHELL",
-    "ANTHROPIC_API_KEY",
-    "ANTIGRAVITY_API_KEY",
-    "XDG_CONFIG_HOME",
-    "XDG_DATA_HOME",
-    "TMPDIR",
-})
+_ALLOWED_ENV_KEYS: frozenset[str] = frozenset(
+    {
+        "HOME",
+        "PATH",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "TERM",
+        "USER",
+        "SHELL",
+        "ANTHROPIC_API_KEY",
+        "ANTIGRAVITY_API_KEY",
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "TMPDIR",
+    }
+)
 
 
 class AntigravityNotFoundError(AgentError):

@@ -17,9 +17,7 @@ class InvalidRepoFormatError(ToolError):
 
     def __init__(self, repo: str) -> None:
         self.repo = repo
-        super().__init__(
-            f"Invalid repo format: {repo!r}. Expected 'owner/repo'."
-        )
+        super().__init__(f"Invalid repo format: {repo!r}. Expected 'owner/repo'.")
 
 
 class GitHubTool(BaseTool):
@@ -89,9 +87,7 @@ class GitHubTool(BaseTool):
         self._validate_repo_format(repo)
         return repo
 
-    async def _issue_list(
-        self, working_dir: str, **kwargs: str | int | list[str]
-    ) -> ToolResult:
+    async def _issue_list(self, working_dir: str, **kwargs: str | int | list[str]) -> ToolResult:
         repo = self._get_repo(kwargs)
         return await self._run_gh(
             working_dir,
@@ -103,15 +99,11 @@ class GitHubTool(BaseTool):
             "number,title,state",
         )
 
-    async def _issue_view(
-        self, working_dir: str, **kwargs: str | int | list[str]
-    ) -> ToolResult:
+    async def _issue_view(self, working_dir: str, **kwargs: str | int | list[str]) -> ToolResult:
         repo = self._get_repo(kwargs)
         number = kwargs.get("number")
         if not isinstance(number, (str, int)) or not str(number):
-            return ToolResult(
-                success=False, output="", error="number is required", exit_code=1
-            )
+            return ToolResult(success=False, output="", error="number is required", exit_code=1)
         return await self._run_gh(
             working_dir,
             "issue",
@@ -123,9 +115,7 @@ class GitHubTool(BaseTool):
             "number,title,body,state",
         )
 
-    async def _pr_list(
-        self, working_dir: str, **kwargs: str | int | list[str]
-    ) -> ToolResult:
+    async def _pr_list(self, working_dir: str, **kwargs: str | int | list[str]) -> ToolResult:
         repo = self._get_repo(kwargs)
         return await self._run_gh(
             working_dir,
@@ -137,15 +127,11 @@ class GitHubTool(BaseTool):
             "number,title,state",
         )
 
-    async def _pr_view(
-        self, working_dir: str, **kwargs: str | int | list[str]
-    ) -> ToolResult:
+    async def _pr_view(self, working_dir: str, **kwargs: str | int | list[str]) -> ToolResult:
         repo = self._get_repo(kwargs)
         number = kwargs.get("number")
         if not isinstance(number, (str, int)) or not str(number):
-            return ToolResult(
-                success=False, output="", error="number is required", exit_code=1
-            )
+            return ToolResult(success=False, output="", error="number is required", exit_code=1)
         return await self._run_gh(
             working_dir,
             "pr",
@@ -157,9 +143,7 @@ class GitHubTool(BaseTool):
             "number,title,body,state",
         )
 
-    async def _ci_status(
-        self, working_dir: str, **kwargs: str | int | list[str]
-    ) -> ToolResult:
+    async def _ci_status(self, working_dir: str, **kwargs: str | int | list[str]) -> ToolResult:
         repo = self._get_repo(kwargs)
         return await self._run_gh(
             working_dir,
@@ -173,15 +157,11 @@ class GitHubTool(BaseTool):
             "status,conclusion,name",
         )
 
-    async def _pr_create(
-        self, working_dir: str, **kwargs: str | int | list[str]
-    ) -> ToolResult:
+    async def _pr_create(self, working_dir: str, **kwargs: str | int | list[str]) -> ToolResult:
         repo = self._get_repo(kwargs)
         title = kwargs.get("title")
         if not isinstance(title, str) or not title:
-            return ToolResult(
-                success=False, output="", error="title is required", exit_code=1
-            )
+            return ToolResult(success=False, output="", error="title is required", exit_code=1)
         body = kwargs.get("body", "")
         if not isinstance(body, str):
             body = ""
@@ -197,9 +177,7 @@ class GitHubTool(BaseTool):
             body,
         )
 
-    async def _pr_merge(
-        self, working_dir: str, **kwargs: str | int | list[str]
-    ) -> ToolResult:
+    async def _pr_merge(self, working_dir: str, **kwargs: str | int | list[str]) -> ToolResult:
         return ToolResult(
             success=False,
             output="",

@@ -25,9 +25,7 @@ async def list_approvals(
 ) -> list[ApprovalSummary]:
     """List approval requests with optional filtering."""
     service = get_approval_service()
-    return await service.list_requests(
-        session, status=status, task_id=task_id, limit=limit
-    )
+    return await service.list_requests(session, status=status, task_id=task_id, limit=limit)
 
 
 @router.get("/approvals/{approval_id}")
@@ -40,9 +38,7 @@ async def get_approval(
     try:
         return await service.get_request(session, approval_id)
     except ApprovalNotFoundError:
-        raise HTTPException(
-            status_code=404, detail=f"Approval request not found: {approval_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"Approval request not found: {approval_id}")
 
 
 @router.post("/approvals/{approval_id}/approve")
@@ -61,9 +57,7 @@ async def approve_request(
             reason=decision.reason,
         )
     except ApprovalNotFoundError:
-        raise HTTPException(
-            status_code=404, detail=f"Approval request not found: {approval_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"Approval request not found: {approval_id}")
     except ApprovalAlreadyDecidedError as e:
         raise HTTPException(status_code=409, detail=str(e))
 
@@ -84,8 +78,6 @@ async def reject_request(
             reason=decision.reason,
         )
     except ApprovalNotFoundError:
-        raise HTTPException(
-            status_code=404, detail=f"Approval request not found: {approval_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"Approval request not found: {approval_id}")
     except ApprovalAlreadyDecidedError as e:
         raise HTTPException(status_code=409, detail=str(e))

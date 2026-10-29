@@ -111,11 +111,13 @@ class DevWorkflow:
                 task_id, request_issue, repo, WorkflowStatus.FAILED, steps=steps, error=step.error
             )
 
-        self._event_bus.publish(Event(
-            type=EventType.WORKFLOW_STARTED,
-            task_id=task_id,
-            data={"issue_number": request_issue},
-        ))
+        self._event_bus.publish(
+            Event(
+                type=EventType.WORKFLOW_STARTED,
+                task_id=task_id,
+                data={"issue_number": request_issue},
+            )
+        )
 
         # Transition to PLANNING then RUNNING
         await self._task_service.transition_task(session, task_id, TaskStatus.PLANNING)
@@ -130,7 +132,12 @@ class DevWorkflow:
         )
         if step.status == WorkflowStepStatus.FAILED:
             return await self._fail_workflow(
-                session, task_id, request_issue, repo, steps, step.error,
+                session,
+                task_id,
+                request_issue,
+                repo,
+                steps,
+                step.error,
             )
 
         # --- Step 3: Resolve project ---
@@ -142,7 +149,12 @@ class DevWorkflow:
         )
         if step.status == WorkflowStepStatus.FAILED:
             return await self._fail_workflow(
-                session, task_id, request_issue, repo, steps, step.error,
+                session,
+                task_id,
+                request_issue,
+                repo,
+                steps,
+                step.error,
             )
 
         working_dir = project_data.get("working_dir", "")
@@ -184,7 +196,12 @@ class DevWorkflow:
         )
         if step.status == WorkflowStepStatus.FAILED:
             return await self._fail_workflow(
-                session, task_id, request_issue, repo, steps, step.error,
+                session,
+                task_id,
+                request_issue,
+                repo,
+                steps,
+                step.error,
             )
 
         # --- Step 6: Implementation loop ---
@@ -242,8 +259,13 @@ class DevWorkflow:
 
         if not implementation_succeeded:
             return await self._fail_workflow(
-                session, task_id, request_issue, repo, steps,
-                "Implementation failed", branch=branch,
+                session,
+                task_id,
+                request_issue,
+                repo,
+                steps,
+                "Implementation failed",
+                branch=branch,
             )
 
         # --- Step 7: Inspect diff ---
@@ -350,7 +372,10 @@ class DevWorkflow:
                     steps,
                     task_id=task_id,
                     coro_fn=lambda fp=fix_prompt: self._run_agent(
-                        session, task_id, fp, working_dir,
+                        session,
+                        task_id,
+                        fp,
+                        working_dir,
                     ),
                 )
                 if step.status == WorkflowStepStatus.COMPLETED:
@@ -395,11 +420,13 @@ class DevWorkflow:
         coro_fn: Callable[[], Awaitable[object]],
     ) -> tuple[WorkflowStepResult, object]:
         """Wrap a step coroutine with timing, events, and error capture."""
-        self._event_bus.publish(Event(
-            type=EventType.WORKFLOW_STEP_STARTED,
-            task_id=task_id or "pending",
-            data={"step": name},
-        ))
+        self._event_bus.publish(
+            Event(
+                type=EventType.WORKFLOW_STEP_STARTED,
+                task_id=task_id or "pending",
+                data={"step": name},
+            )
+        )
         start = time.monotonic()
         try:
             result = await coro_fn()
@@ -467,9 +494,7 @@ class DevWorkflow:
         body = lines[1].strip() if len(lines) > 1 else ""
         return {"title": title, "body": body}
 
-    async def _resolve_project(
-        self, session: AsyncSession, project_id: str
-    ) -> dict[str, str]:
+    async def _resolve_project(self, session: AsyncSession, project_id: str) -> dict[str, str]:
         """Resolve project to get working directory and repo."""
         project = await self._project_service.get_project(session, project_id)
         return {
@@ -580,14 +605,10 @@ class DevWorkflow:
                 return False
         return False
 
-    async def _create_pr(
-        self, working_dir: str, title: str, body: str, repo: str
-    ) -> str:
+    async def _create_pr(self, working_dir: str, title: str, body: str, repo: str) -> str:
         """Create a pull request and return its URL."""
         github_tool = self._tool_registry.get("github")
-        result = await github_tool.execute(
-            "pr_create", working_dir, title=title, body=body
-        )
+        result = await github_tool.execute("pr_create", working_dir, title=title, body=body)
         if not result.success:
             raise RuntimeError(f"PR creation failed: {result.error}")
         return result.output.strip()
@@ -628,11 +649,13 @@ class DevWorkflow:
             parts.extend(["", "# Previous Errors (fix these)", ""])
             for err in test_errors:
                 parts.append(f"- {err}")
-        parts.extend([
-            "",
-            "Implement the changes needed to resolve this issue.",
-            "Make sure all existing tests continue to pass.",
-        ])
+        parts.extend(
+            [
+                "",
+                "Implement the changes needed to resolve this issue.",
+                "Make sure all existing tests continue to pass.",
+            ]
+        )
         return "\n".join(parts)
 
     # --- Result builders ---

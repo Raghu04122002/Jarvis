@@ -40,9 +40,7 @@ class NotificationService:
                     )
                 )
             except Exception:
-                logger.exception(
-                    "Notification provider %s failed", provider.name
-                )
+                logger.exception("Notification provider %s failed", provider.name)
                 self._event_bus.publish(
                     Event(
                         type=EventType.NOTIFICATION_FAILED,

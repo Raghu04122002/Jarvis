@@ -4,18 +4,20 @@ from jarvis.agents.registry import AgentRegistry
 from jarvis.config import AgentsConfig
 from jarvis.models.task import Task
 
-_ANTIGRAVITY_KEYWORDS: frozenset[str] = frozenset({
-    "browser",
-    "ui",
-    "visual",
-    "screenshot",
-    "selenium",
-    "playwright",
-    "click",
-    "navigate",
-    "webpage",
-    "web page",
-})
+_ANTIGRAVITY_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "browser",
+        "ui",
+        "visual",
+        "screenshot",
+        "selenium",
+        "playwright",
+        "click",
+        "navigate",
+        "webpage",
+        "web page",
+    }
+)
 
 # Bidirectional fallback mapping.
 _FALLBACK_MAP: dict[str, str] = {

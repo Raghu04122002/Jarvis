@@ -111,9 +111,7 @@ class ApprovalService:
         )
         return _row_to_full(row)
 
-    async def get_request(
-        self, session: AsyncSession, approval_id: str
-    ) -> ApprovalRequestFull:
+    async def get_request(self, session: AsyncSession, approval_id: str) -> ApprovalRequestFull:
         """Get an approval request by ID. Raises ApprovalNotFoundError if missing."""
         row = await session.get(ApprovalRequestRow, approval_id)
         if row is None:
@@ -151,9 +149,7 @@ class ApprovalService:
         if row is None:
             raise ApprovalNotFoundError(approval_id)
         if row.status != ApprovalStatus.PENDING.value:
-            raise ApprovalAlreadyDecidedError(
-                approval_id, ApprovalStatus(row.status)
-            )
+            raise ApprovalAlreadyDecidedError(approval_id, ApprovalStatus(row.status))
 
         now = datetime.now(UTC)
         row.status = ApprovalStatus.APPROVED.value
@@ -184,9 +180,7 @@ class ApprovalService:
         if row is None:
             raise ApprovalNotFoundError(approval_id)
         if row.status != ApprovalStatus.PENDING.value:
-            raise ApprovalAlreadyDecidedError(
-                approval_id, ApprovalStatus(row.status)
-            )
+            raise ApprovalAlreadyDecidedError(approval_id, ApprovalStatus(row.status))
 
         now = datetime.now(UTC)
         row.status = ApprovalStatus.DENIED.value

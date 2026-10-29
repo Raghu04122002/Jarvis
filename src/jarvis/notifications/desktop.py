@@ -16,9 +16,7 @@ class DesktopNotificationProvider:
     def name(self) -> str:
         return "desktop"
 
-    async def send(
-        self, title: str, body: str, metadata: dict[str, Any] | None = None
-    ) -> None:
+    async def send(self, title: str, body: str, metadata: dict[str, Any] | None = None) -> None:
         try:
             from plyer import notification
 

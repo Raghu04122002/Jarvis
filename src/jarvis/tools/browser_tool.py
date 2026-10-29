@@ -127,13 +127,9 @@ class BrowserTool(BaseTool):
         except BrowserNotStartedError as exc:
             return ToolResult(success=False, output="", error=str(exc), exit_code=1)
         except PlaywrightTimeoutError as exc:
-            return ToolResult(
-                success=False, output="", error=f"Timeout: {exc}", exit_code=1
-            )
+            return ToolResult(success=False, output="", error=f"Timeout: {exc}", exit_code=1)
         except PlaywrightError as exc:
-            return ToolResult(
-                success=False, output="", error=f"Browser error: {exc}", exit_code=1
-            )
+            return ToolResult(success=False, output="", error=f"Browser error: {exc}", exit_code=1)
 
     def _check_url_allowed(self, url: str) -> str | None:
         """Return an error message if the URL is blocked, else None."""
@@ -148,20 +144,14 @@ class BrowserTool(BaseTool):
             for pattern in self._config.allowed_domains:
                 if fnmatch(domain, pattern):
                     return None
-            return (
-                f"URL blocked: domain '{domain}' is not in the allowed domains list"
-            )
+            return f"URL blocked: domain '{domain}' is not in the allowed domains list"
 
         return None
 
-    async def _navigate(
-        self, working_dir: str, **kwargs: str | int | list[str]
-    ) -> ToolResult:
+    async def _navigate(self, working_dir: str, **kwargs: str | int | list[str]) -> ToolResult:
         url = kwargs.get("url")
         if not isinstance(url, str) or not url:
-            return ToolResult(
-                success=False, output="", error="url is required", exit_code=1
-            )
+            return ToolResult(success=False, output="", error="url is required", exit_code=1)
 
         error = self._check_url_allowed(url)
         if error:
@@ -177,14 +167,10 @@ class BrowserTool(BaseTool):
             output=f"Navigated to {self._session.page.url} — title: {title}",
         )
 
-    async def _click(
-        self, working_dir: str, **kwargs: str | int | list[str]
-    ) -> ToolResult:
+    async def _click(self, working_dir: str, **kwargs: str | int | list[str]) -> ToolResult:
         selector = kwargs.get("selector")
         if not isinstance(selector, str) or not selector:
-            return ToolResult(
-                success=False, output="", error="selector is required", exit_code=1
-            )
+            return ToolResult(success=False, output="", error="selector is required", exit_code=1)
 
         await self._session.page.click(selector)
 
@@ -201,40 +187,26 @@ class BrowserTool(BaseTool):
             output=f"Clicked '{selector}' — now at {current_url} — title: {title}",
         )
 
-    async def _fill(
-        self, working_dir: str, **kwargs: str | int | list[str]
-    ) -> ToolResult:
+    async def _fill(self, working_dir: str, **kwargs: str | int | list[str]) -> ToolResult:
         selector = kwargs.get("selector")
         if not isinstance(selector, str) or not selector:
-            return ToolResult(
-                success=False, output="", error="selector is required", exit_code=1
-            )
+            return ToolResult(success=False, output="", error="selector is required", exit_code=1)
         value = kwargs.get("value")
         if not isinstance(value, str):
-            return ToolResult(
-                success=False, output="", error="value is required", exit_code=1
-            )
+            return ToolResult(success=False, output="", error="value is required", exit_code=1)
 
         await self._session.page.fill(selector, value)
-        return ToolResult(
-            success=True, output=f"Filled '{selector}' with value"
-        )
+        return ToolResult(success=True, output=f"Filled '{selector}' with value")
 
-    async def _press(
-        self, working_dir: str, **kwargs: str | int | list[str]
-    ) -> ToolResult:
+    async def _press(self, working_dir: str, **kwargs: str | int | list[str]) -> ToolResult:
         key = kwargs.get("key")
         if not isinstance(key, str) or not key:
-            return ToolResult(
-                success=False, output="", error="key is required", exit_code=1
-            )
+            return ToolResult(success=False, output="", error="key is required", exit_code=1)
 
         await self._session.page.keyboard.press(key)
         return ToolResult(success=True, output=f"Pressed key '{key}'")
 
-    async def _screenshot(
-        self, working_dir: str, **kwargs: str | int | list[str]
-    ) -> ToolResult:
+    async def _screenshot(self, working_dir: str, **kwargs: str | int | list[str]) -> ToolResult:
         path = kwargs.get("path")
         if not isinstance(path, str) or not path:
             path = "screenshot.png"
@@ -253,14 +225,10 @@ class BrowserTool(BaseTool):
         info = {"url": page.url, "title": title}
         return ToolResult(success=True, output=json.dumps(info))
 
-    async def _inspect(
-        self, working_dir: str, **kwargs: str | int | list[str]
-    ) -> ToolResult:
+    async def _inspect(self, working_dir: str, **kwargs: str | int | list[str]) -> ToolResult:
         selector = kwargs.get("selector")
         if not isinstance(selector, str) or not selector:
-            return ToolResult(
-                success=False, output="", error="selector is required", exit_code=1
-            )
+            return ToolResult(success=False, output="", error="selector is required", exit_code=1)
 
         elements = await self._session.page.query_selector_all(selector)
         results: list[dict[str, object]] = []
@@ -277,9 +245,7 @@ class BrowserTool(BaseTool):
             output=json.dumps(results, indent=2),
         )
 
-    async def _wait(
-        self, working_dir: str, **kwargs: str | int | list[str]
-    ) -> ToolResult:
+    async def _wait(self, working_dir: str, **kwargs: str | int | list[str]) -> ToolResult:
         selector = kwargs.get("selector")
         timeout_ms = kwargs.get("timeout_ms")
         state = kwargs.get("state")
@@ -289,20 +255,19 @@ class BrowserTool(BaseTool):
         if isinstance(selector, str) and selector:
             wait_state = str(state) if state else "visible"
             await self._session.page.wait_for_selector(
-                selector, timeout=timeout, state=wait_state  # type: ignore[arg-type]
+                selector,
+                timeout=timeout,
+                state=wait_state,  # type: ignore[arg-type]
             )
-            return ToolResult(
-                success=True, output=f"Element '{selector}' is {wait_state}"
-            )
+            return ToolResult(success=True, output=f"Element '{selector}' is {wait_state}")
 
         load_state = str(state) if state else "load"
         await self._session.page.wait_for_load_state(
-            load_state, timeout=timeout  # type: ignore[arg-type]
+            load_state,
+            timeout=timeout,  # type: ignore[arg-type]
         )
         return ToolResult(success=True, output=f"Page reached '{load_state}' state")
 
-    async def _close(
-        self, working_dir: str, **kwargs: str | int | list[str]
-    ) -> ToolResult:
+    async def _close(self, working_dir: str, **kwargs: str | int | list[str]) -> ToolResult:
         await self._session.close()
         return ToolResult(success=True, output="Browser session closed")

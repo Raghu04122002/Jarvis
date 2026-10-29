@@ -12,12 +12,14 @@ from jarvis.models.audit import AuditEntry
 
 logger = logging.getLogger(__name__)
 
-_APPROVAL_EVENT_TYPES = frozenset({
-    EventType.APPROVAL_REQUESTED,
-    EventType.APPROVAL_APPROVED,
-    EventType.APPROVAL_DENIED,
-    EventType.APPROVAL_EXPIRED,
-})
+_APPROVAL_EVENT_TYPES = frozenset(
+    {
+        EventType.APPROVAL_REQUESTED,
+        EventType.APPROVAL_APPROVED,
+        EventType.APPROVAL_DENIED,
+        EventType.APPROVAL_EXPIRED,
+    }
+)
 
 
 class AuditLogger:

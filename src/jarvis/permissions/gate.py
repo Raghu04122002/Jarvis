@@ -31,9 +31,7 @@ class PermissionDeniedError(Exception):
     def __init__(self, tool_name: str, operation: str) -> None:
         self.tool_name = tool_name
         self.operation = operation
-        super().__init__(
-            f"Operation permanently blocked: {tool_name}.{operation}"
-        )
+        super().__init__(f"Operation permanently blocked: {tool_name}.{operation}")
 
 
 class PermissionGate:
@@ -92,9 +90,7 @@ class PermissionGate:
 
         # Slow path: check DB
         if self._approval_service is not None:
-            if await self._approval_service.is_approved(
-                session, task_id, tool_name, operation
-            ):
+            if await self._approval_service.is_approved(session, task_id, tool_name, operation):
                 return
 
         raise ApprovalRequiredError(tool_name, operation)

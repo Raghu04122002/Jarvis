@@ -97,6 +97,4 @@ class ApprovalAlreadyDecidedError(Exception):
     def __init__(self, approval_id: str, current_status: ApprovalStatus) -> None:
         self.approval_id = approval_id
         self.current_status = current_status
-        super().__init__(
-            f"Approval request {approval_id} already decided: {current_status}"
-        )
+        super().__init__(f"Approval request {approval_id} already decided: {current_status}")

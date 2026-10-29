@@ -73,6 +73,7 @@ def _compute_next_run(
             return None
         try:
             from croniter import croniter
+
             cron = croniter(cron_expression, now)
             next_dt = cron.get_next(datetime)
             if next_dt.tzinfo is None:
@@ -137,14 +138,10 @@ class SchedulerService:
         await session.flush()
 
         scheduled = _row_to_scheduled_task(row)
-        self._event_bus.publish(
-            Event(type=EventType.SCHEDULE_CREATED, task_id=sched_id)
-        )
+        self._event_bus.publish(Event(type=EventType.SCHEDULE_CREATED, task_id=sched_id))
         return scheduled
 
-    async def get_scheduled_task(
-        self, session: AsyncSession, schedule_id: str
-    ) -> ScheduledTask:
+    async def get_scheduled_task(self, session: AsyncSession, schedule_id: str) -> ScheduledTask:
         row = await session.get(ScheduledTaskRow, schedule_id)
         if row is None:
             raise ScheduledTaskNotFoundError(schedule_id)
@@ -205,30 +202,22 @@ class SchedulerService:
         row.updated_at = datetime.now(UTC)
         await session.flush()
 
-        self._event_bus.publish(
-            Event(type=EventType.SCHEDULE_UPDATED, task_id=schedule_id)
-        )
+        self._event_bus.publish(Event(type=EventType.SCHEDULE_UPDATED, task_id=schedule_id))
         return _row_to_scheduled_task(row)
 
-    async def pause_scheduled_task(
-        self, session: AsyncSession, schedule_id: str
-    ) -> ScheduledTask:
+    async def pause_scheduled_task(self, session: AsyncSession, schedule_id: str) -> ScheduledTask:
         row = await session.get(ScheduledTaskRow, schedule_id)
         if row is None:
             raise ScheduledTaskNotFoundError(schedule_id)
 
         if ScheduledTaskStatus(row.status) != ScheduledTaskStatus.ACTIVE:
-            raise ValueError(
-                f"Can only pause active schedules. Current status: {row.status}"
-            )
+            raise ValueError(f"Can only pause active schedules. Current status: {row.status}")
 
         row.status = ScheduledTaskStatus.PAUSED.value
         row.updated_at = datetime.now(UTC)
         await session.flush()
 
-        self._event_bus.publish(
-            Event(type=EventType.SCHEDULE_PAUSED, task_id=schedule_id)
-        )
+        self._event_bus.publish(Event(type=EventType.SCHEDULE_PAUSED, task_id=schedule_id))
         return _row_to_scheduled_task(row)
 
     async def resume_scheduled_task(
@@ -239,9 +228,7 @@ class SchedulerService:
             raise ScheduledTaskNotFoundError(schedule_id)
 
         if ScheduledTaskStatus(row.status) != ScheduledTaskStatus.PAUSED:
-            raise ValueError(
-                f"Can only resume paused schedules. Current status: {row.status}"
-            )
+            raise ValueError(f"Can only resume paused schedules. Current status: {row.status}")
 
         row.status = ScheduledTaskStatus.ACTIVE.value
         row.next_run_at = _compute_next_run(
@@ -253,9 +240,7 @@ class SchedulerService:
         row.updated_at = datetime.now(UTC)
         await session.flush()
 
-        self._event_bus.publish(
-            Event(type=EventType.SCHEDULE_RESUMED, task_id=schedule_id)
-        )
+        self._event_bus.publish(Event(type=EventType.SCHEDULE_RESUMED, task_id=schedule_id))
         return _row_to_scheduled_task(row)
 
     async def cancel_scheduled_task(
@@ -267,23 +252,17 @@ class SchedulerService:
 
         current = ScheduledTaskStatus(row.status)
         if current in (ScheduledTaskStatus.COMPLETED, ScheduledTaskStatus.CANCELLED):
-            raise ValueError(
-                f"Cannot cancel a schedule in terminal status: {row.status}"
-            )
+            raise ValueError(f"Cannot cancel a schedule in terminal status: {row.status}")
 
         row.status = ScheduledTaskStatus.CANCELLED.value
         row.next_run_at = None
         row.updated_at = datetime.now(UTC)
         await session.flush()
 
-        self._event_bus.publish(
-            Event(type=EventType.SCHEDULE_CANCELLED, task_id=schedule_id)
-        )
+        self._event_bus.publish(Event(type=EventType.SCHEDULE_CANCELLED, task_id=schedule_id))
         return _row_to_scheduled_task(row)
 
-    async def get_due_tasks(
-        self, session: AsyncSession
-    ) -> list[ScheduledTask]:
+    async def get_due_tasks(self, session: AsyncSession) -> list[ScheduledTask]:
         now = datetime.now(UTC)
         stmt = (
             select(ScheduledTaskRow)
@@ -318,9 +297,7 @@ class SchedulerService:
                 row.status = ScheduledTaskStatus.FAILED.value
                 row.next_run_at = None
                 await session.flush()
-                self._event_bus.publish(
-                    Event(type=EventType.SCHEDULE_FAILED, task_id=schedule_id)
-                )
+                self._event_bus.publish(Event(type=EventType.SCHEDULE_FAILED, task_id=schedule_id))
                 return _row_to_scheduled_task(row)
 
         schedule_type = ScheduleType(row.schedule_type)

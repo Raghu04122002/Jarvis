@@ -97,9 +97,7 @@ class MemoryService:
         session.add(row)
         await session.flush()
         memory = _row_to_memory(row)
-        self._event_bus.publish(
-            Event(type=EventType.MEMORY_CREATED, task_id=memory_id)
-        )
+        self._event_bus.publish(Event(type=EventType.MEMORY_CREATED, task_id=memory_id))
         return memory
 
     async def get_memory(self, session: AsyncSession, memory_id: str) -> Memory:
@@ -143,9 +141,7 @@ class MemoryService:
             stmt = stmt.where(MemoryRow.project_id == project_id)
         if tags:
             for tag in tags:
-                stmt = stmt.where(
-                    cast(MemoryRow.tags, Text).ilike(f'%"{tag}"%')
-                )
+                stmt = stmt.where(cast(MemoryRow.tags, Text).ilike(f'%"{tag}"%'))
         stmt = stmt.order_by(MemoryRow.updated_at.desc()).limit(limit)
         result = await session.execute(stmt)
         rows = result.scalars().all()
@@ -174,9 +170,7 @@ class MemoryService:
             stmt = stmt.where(MemoryRow.project_id == project_id)
         if tags:
             for tag in tags:
-                stmt = stmt.where(
-                    cast(MemoryRow.tags, Text).ilike(f'%"{tag}"%')
-                )
+                stmt = stmt.where(cast(MemoryRow.tags, Text).ilike(f'%"{tag}"%'))
         stmt = stmt.order_by(MemoryRow.updated_at.desc()).limit(limit)
         result = await session.execute(stmt)
         rows = result.scalars().all()
@@ -206,9 +200,7 @@ class MemoryService:
         row.version += 1
         await session.flush()
 
-        self._event_bus.publish(
-            Event(type=EventType.MEMORY_UPDATED, task_id=memory_id)
-        )
+        self._event_bus.publish(Event(type=EventType.MEMORY_UPDATED, task_id=memory_id))
         return _row_to_memory(row)
 
     async def delete_memory(self, session: AsyncSession, memory_id: str) -> None:
@@ -217,9 +209,7 @@ class MemoryService:
             raise MemoryNotFoundError(memory_id)
         await session.delete(row)
         await session.flush()
-        self._event_bus.publish(
-            Event(type=EventType.MEMORY_DELETED, task_id=memory_id)
-        )
+        self._event_bus.publish(Event(type=EventType.MEMORY_DELETED, task_id=memory_id))
 
     async def retrieve_context(
         self,

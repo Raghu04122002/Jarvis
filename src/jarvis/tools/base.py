@@ -16,9 +16,7 @@ class InvalidOperationError(ToolError):
     def __init__(self, tool_name: str, operation: str) -> None:
         self.tool_name = tool_name
         self.operation = operation
-        super().__init__(
-            f"Invalid operation '{operation}' for tool '{tool_name}'"
-        )
+        super().__init__(f"Invalid operation '{operation}' for tool '{tool_name}'")
 
 
 @dataclass(frozen=True)
